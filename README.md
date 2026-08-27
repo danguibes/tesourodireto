@@ -4,6 +4,23 @@ Simula a compra de um título público numa data passada e mostra, dia a dia,
 quanto ele valeria pelo cálculo nominal contratado (o "valor na curva") e
 quanto o mercado efetivamente pagava (a marcação a mercado).
 
+Duas páginas:
+
+- **Simulação** — uma compra hipotética, com gráfico da curva contra o mercado,
+  o ágio ao longo do tempo e os cupons ou amortizações recebidos no caminho.
+- **Carteira** — importa uma planilha com várias compras e devolve o ágio ou
+  deságio de cada posição, mais o consolidado.
+
+## Planilha da carteira
+
+Três colunas bastam: `data_compra`, `titulo` e `quantidade`. O nome do título
+pode vir como aparece na corretora ("Tesouro IPCA+ 2035", "Tesouro Educa+
+2028"); no RendA+ e no Educa+ o ano do nome é o de conversão, e o app converte
+para o vencimento real. Duas colunas opcionais cobrem casos específicos:
+`vencimento`, necessária quando o ano é ambíguo, e `pu_compra`, o preço que
+você realmente pagou. Em vez de `quantidade` é possível informar
+`valor_aplicado`. Aceita CSV e Excel.
+
 ## Instalação
 
 ```bash
@@ -42,6 +59,18 @@ depois de cada hibernação do contêiner.
 | Tesouro IPCA+ com Juros Semestrais (NTN-B) | cupom de 2,9563% do VNA, semestral |
 | Tesouro IGPM+ com Juros Semestrais (NTN-C) | cupom de 2,9563% do VNA, semestral |
 | Tesouro RendA+ / Educa+ (NTN-B1) | 240 / 60 amortizações mensais |
+
+## Estrutura
+
+```
+app.py                  roteador das páginas
+paginas/simulacao.py    simulação de uma compra
+paginas/carteira.py     importação de planilha e consolidado
+tesouro_core.py         calendário, fluxos de caixa e precificação
+tesouro_dados.py        download, cache e montagem das séries
+ui_comum.py             carga compartilhada e resolução de nomes de título
+teste_simulacao.py      testes com dados reais embutidos, roda sem rede
+```
 
 ## Metodologia
 
