@@ -1,0 +1,29 @@
+# Cache local de dados (baixado do Tesouro Transparente em tempo de execução)
+dados/
+*.parquet
+*.csv
+*.parcial
+
+# Credenciais e segredos — nunca versionar
+credentials.json
+token.json
+client_secret*.json
+service_account*.json
+*.pem
+*.key
+.env
+.env.*
+secrets.toml
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
