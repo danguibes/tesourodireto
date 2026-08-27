@@ -253,7 +253,15 @@ st.subheader("Ágio por posição")
 barras = res.copy()
 barras["rotulo"] = (barras["Título"].str.replace("Tesouro ", "", regex=False)
                     + " " + barras["Vencimento"].map(lambda d: str(d.year))
-                    + " · " + barras["Compra"].map(lambda d: f"{d:%m/%y}"))
+                    + " · " + barras["Compra"].map(lambda d: f"{d:%d/%m/%y}"))
+
+# Duas compras do mesmo papel no mesmo dia ainda colidiriam e seriam
+# desenhadas uma sobre a outra. O sufixo mantém cada lote na sua linha.
+dup = barras["rotulo"].duplicated(keep=False)
+if dup.any():
+    ordem = barras.groupby("rotulo").cumcount() + 1
+    barras.loc[dup, "rotulo"] = (barras.loc[dup, "rotulo"]
+                                 + " (" + ordem[dup].astype(str) + ")")
 
 gr = (
     alt.Chart(barras)
@@ -263,12 +271,23 @@ gr = (
         x=alt.X("Ágio (%):Q", title="% sobre o valor na curva"),
         color=alt.condition(alt.datum["Ágio (%)"] >= 0,
                             alt.value(ui.COR_POSITIVO), alt.value(ui.COR_MERCADO)),
-        tooltip=["Título", alt.Tooltip("Ágio (R$):Q", format=",.2f"),
+        tooltip=["Título",
+                 alt.Tooltip("Vencimento:T", title="Vencimento",
+                             format="%d/%m/%Y"),
+                 alt.Tooltip("Compra:T", title="Compra", format="%d/%m/%Y"),
+                 alt.Tooltip("Taxa (% a.a.):Q", title="Taxa contratada",
+                             format=".2f"),
+                 alt.Tooltip("Ágio (R$):Q", format=",.2f"),
                  alt.Tooltip("Ágio (%):Q", format="+.2f")],
     )
     .properties(height=max(140, 34 * len(barras)))
 )
 st.altair_chart(gr, use_container_width=True)
+st.caption(
+    "Cada barra é uma compra, não um título: o mesmo papel adquirido em datas "
+    "diferentes trava taxas diferentes e por isso aparece mais de uma vez, "
+    "podendo inclusive ter sinais opostos."
+)
 
 with st.expander("Evolução consolidada da carteira", expanded=False):
     quadro = None
