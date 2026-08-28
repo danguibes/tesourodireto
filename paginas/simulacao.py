@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import altair as alt
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -189,6 +190,84 @@ st.altair_chart(
     ).properties(height=380),
     use_container_width=True,
 )
+
+with st.expander("Comparação com os indexadores", expanded=False):
+    idx = ui.indices(df, len(df))
+
+    if idx.empty:
+        st.caption("Não consegui reconstruir as séries de indexadores.")
+    else:
+        alinhado = (idx.reindex(idx.index.union(serie["data"]))
+                    .ffill()
+                    .reindex(serie["data"]))
+
+        comp = pd.DataFrame({"data": serie["data"].to_numpy()})
+        comp["Valor a mercado"] = serie["mercado_caixa"].to_numpy()
+        comp["Valor na curva"] = serie["curva_caixa"].to_numpy()
+
+        nomes = {"ipca": "Só a inflação (IPCA)", "selic": "Selic acumulada"}
+        if pos.indexador == "igpm":
+            nomes["igpm"] = "Só o IGP-M"
+
+        for col, rotulo in nomes.items():
+            if col not in alinhado.columns:
+                continue
+            base = alinhado[col].to_numpy()
+            if not np.isfinite(base[0]) or base[0] == 0:
+                continue
+            comp[rotulo] = pos.aplicado * base / base[0]
+
+        cols_comp = [c for c in comp.columns if c != "data"]
+        paleta = {
+            "Valor a mercado": ui.COR_MERCADO,
+            "Valor na curva": ui.COR_CURVA,
+            "Só a inflação (IPCA)": "#b8860b",
+            "Selic acumulada": "#6a7f8f",
+            "Só o IGP-M": "#8e6c9a",
+        }
+
+        longo_c = comp.melt(id_vars="data", value_vars=cols_comp,
+                            var_name="serie", value_name="valor").dropna()
+
+        st.altair_chart(
+            alt.Chart(longo_c).mark_line(strokeWidth=2).encode(
+                x=alt.X("data:T", title=None),
+                y=alt.Y("valor:Q", title="R$", scale=alt.Scale(zero=False)),
+                color=alt.Color(
+                    "serie:N", title=None,
+                    scale=alt.Scale(domain=cols_comp,
+                                    range=[paleta[c] for c in cols_comp]),
+                    legend=alt.Legend(orient="top", columns=2)),
+                tooltip=[alt.Tooltip("data:T", title="Data", format="%d/%m/%Y"),
+                         alt.Tooltip("serie:N", title=""),
+                         alt.Tooltip("valor:Q", title="R$", format=",.2f")],
+            ).properties(height=360),
+            use_container_width=True,
+        )
+
+        fim_c = comp.iloc[-1]
+        resumo = []
+        for c in cols_comp:
+            if pd.isna(fim_c[c]):
+                continue
+            resumo.append({
+                "Cenário": c,
+                "Valor final": ui.brl(fim_c[c]),
+                "Retorno": f"{(fim_c[c] / pos.aplicado - 1) * 100:+.2f}%",
+            })
+        st.dataframe(pd.DataFrame(resumo), hide_index=True,
+                     use_container_width=True)
+
+        st.caption(
+            "As linhas dos indexadores mostram quanto o mesmo dinheiro valeria "
+            "se apenas acompanhasse o índice, sem juro real nenhum. Nada disso "
+            "vem de fonte externa: o VNA de cada data é extraído dos próprios "
+            "preços do Tesouro, e a razão entre dois VNAs é a variação "
+            "acumulada do indexador. Vale notar que o VNA embute a projeção de "
+            "inflação do mês corrente, então anda um pouco à frente do IPCA "
+            "divulgado pelo IBGE — é o índice que o título de fato paga. Todos "
+            "os valores são brutos, sem imposto de renda."
+        )
 
 with st.expander("Ágio/deságio ao longo do tempo", expanded=False):
     st.altair_chart(

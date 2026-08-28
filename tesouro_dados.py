@@ -245,6 +245,65 @@ def simular(df: pd.DataFrame, titulo: str, vencimento,
     return pos, out
 
 
+def series_indices(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Reconstrói a evolução dos indexadores a partir dos preços publicados.
+
+    Nenhuma fonte externa é consultada: o VNA de um título indexado é, por
+    definição, o valor nominal já corrigido pelo seu índice, e sai de
+    `VNA = PU ÷ cotação`. A razão entre dois VNAs é a variação acumulada do
+    indexador entre as duas datas.
+
+    Devolve um DataFrame indexado por data_base com as colunas disponíveis
+    entre `ipca`, `selic` e `igpm`, em nível (não em variação).
+
+    Ressalva: o VNA embute a projeção de inflação usada pelo mercado para o
+    mês corrente, então a série anda um pouco à frente do IPCA divulgado.
+    É o índice que o título de fato paga, não o número do IBGE.
+    """
+    saida: dict[str, pd.Series] = {}
+
+    # Títulos zero-cupom: VNA = PU x (1 + taxa)^(du/252), direto e vetorizado.
+    for coluna, nome in (("ipca", "Tesouro IPCA+"), ("selic", "Tesouro Selic")):
+        sub = df.loc[df["titulo"] == nome,
+                     ["data_base", "vencimento", "taxa_venda", "pu_venda"]]
+        sub = sub.dropna()
+        if sub.empty:
+            continue
+        du = tc.dias_uteis_vetor(sub["data_base"].to_numpy(),
+                                 sub["vencimento"].to_numpy())
+        vna = sub["pu_venda"].to_numpy() * (
+            1 + sub["taxa_venda"].to_numpy() / 100.0) ** (du / 252.0)
+        # A mediana entre os vencimentos do dia absorve o arredondamento das
+        # taxas em duas casas decimais.
+        saida[coluna] = (pd.Series(vna, index=sub["data_base"].to_numpy())
+                         .groupby(level=0).median())
+
+    # IGP-M só existe em título com cupom (NTN-C), então precisa da cotação.
+    ntnc = df.loc[df["familia"] == tc.NTNC]
+    if not ntnc.empty:
+        pedacos = []
+        for (nome, venc), g in ntnc.groupby(["titulo", "vencimento"],
+                                            observed=True):
+            g = g.dropna(subset=["taxa_venda", "pu_venda"])
+            if g.empty:
+                continue
+            cot = tc.cotacao_serie(nome, venc.date(),
+                                   g["data_base"].dt.date.to_numpy(),
+                                   g["taxa_venda"].to_numpy())
+            pedacos.append(pd.Series(g["pu_venda"].to_numpy() / cot,
+                                     index=g["data_base"].to_numpy()))
+        if pedacos:
+            saida["igpm"] = pd.concat(pedacos).groupby(level=0).median()
+
+    if not saida:
+        return pd.DataFrame()
+
+    idx = pd.DataFrame(saida).sort_index()
+    idx.index.name = "data"
+    return idx
+
+
 def fluxos_do_papel(pos: tc.Posicao, serie: pd.DataFrame) -> pd.DataFrame:
     """Tabela dos pagamentos (cupom ou amortização) já ocorridos após a compra."""
     linhas = []

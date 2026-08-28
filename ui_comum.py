@@ -32,6 +32,12 @@ def catalogo(_df: pd.DataFrame, versao: int) -> pd.DataFrame:
     return td.catalogo(_df)
 
 
+@st.cache_data(show_spinner=False)
+def indices(_df: pd.DataFrame, versao: int) -> pd.DataFrame:
+    """Séries de IPCA, Selic e IGP-M reconstruídas a partir dos preços."""
+    return td.series_indices(_df)
+
+
 def dados_ou_para() -> pd.DataFrame:
     """Carrega o histórico, mostrando erro amigável e interrompendo se falhar."""
     forcar = st.session_state.pop("forcar_download", False)

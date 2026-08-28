@@ -60,6 +60,23 @@ def dias_uteis(inicio: date, fim: date) -> int:
     return int(_acum[_idx(fim)] - _acum[_idx(inicio)])
 
 
+def dias_uteis_vetor(inicio, fim) -> np.ndarray:
+    """
+    Versão vetorizada de `dias_uteis`, para colunas inteiras de um DataFrame.
+
+    Aceita arrays de datetime64 ou de objetos date.
+    """
+    def _ordinais(x) -> np.ndarray:
+        arr = np.asarray(x)
+        if np.issubdtype(arr.dtype, np.datetime64):
+            return arr.astype("datetime64[D]").astype(np.int64) + 719163
+        return np.array([d.toordinal() for d in arr.ravel()], dtype=np.int64)
+
+    i = _ordinais(inicio) - _ORDINAL_BASE
+    f = _ordinais(fim) - _ORDINAL_BASE
+    return (_acum[f] - _acum[i]).astype(np.int64)
+
+
 def ajusta(d: date) -> date:
     """Leva a data ao próximo dia útil, se cair em feriado ou fim de semana."""
     return _dias[int(_prox[_idx(d)])]
