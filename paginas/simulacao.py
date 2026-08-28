@@ -52,10 +52,25 @@ valor = st.sidebar.number_input("Valor aplicado (R$)", min_value=30.0,
                                 value=10_000.0, step=500.0)
 
 st.sidebar.divider()
+st.sidebar.markdown("**Linhas de referência**")
+
+familia_sel = tc.classificar(titulo)
+
 mostrar_reinvest = st.sidebar.checkbox(
-    "Mostrar também a curva com reinvestimento", value=True,
+    "Curva com reinvestimento", value=True,
     help="Só muda o resultado em títulos que pagam cupom ou amortização.",
 )
+mostrar_ipca = st.sidebar.checkbox(
+    "IPCA acumulado", value=False,
+    help="Quanto o mesmo dinheiro valeria se apenas acompanhasse a inflação.",
+)
+mostrar_selic = st.sidebar.checkbox(
+    "Selic acumulada", value=False,
+    help="Quanto renderia no caixa, à Selic capitalizada do período.",
+)
+mostrar_igpm = False
+if familia_sel == tc.NTNC:
+    mostrar_igpm = st.sidebar.checkbox("IGP-M acumulado", value=False)
 
 # ---------------------------------------------------------------------------
 
@@ -163,110 +178,84 @@ with st.expander("O contrato: na compra vs. hoje", expanded=True):
         f"nos prefixados ele é fixo em R$ 1.000."
     )
 
-cols = ["curva_caixa", "mercado_caixa"]
-rotulos = {"curva_caixa": "Valor na curva", "mercado_caixa": "Valor a mercado"}
-cores = [ui.COR_CURVA, ui.COR_MERCADO]
+PALETA = {
+    "Valor na curva": ui.COR_CURVA,
+    "Valor a mercado": ui.COR_MERCADO,
+    "Na curva, reinvestindo": ui.COR_REINVEST,
+    "Só a inflação (IPCA)": "#b8860b",
+    "Selic acumulada": "#4f7a8c",
+    "Só o IGP-M": "#8e6c9a",
+}
+
+plot = pd.DataFrame({"data": serie["data"].to_numpy()})
+plot["Valor na curva"] = serie["curva_caixa"].to_numpy()
+plot["Valor a mercado"] = serie["mercado_caixa"].to_numpy()
 
 if mostrar_reinvest and paga_fluxo:
-    cols.append("curva_reinvest")
-    rotulos["curva_reinvest"] = "Na curva, reinvestindo"
-    cores.append(ui.COR_REINVEST)
+    plot["Na curva, reinvestindo"] = serie["curva_reinvest"].to_numpy()
 
-longo = serie.melt(id_vars="data", value_vars=cols,
-                   var_name="serie", value_name="valor")
-longo["serie"] = longo["serie"].map(rotulos)
+referencias = {}
+if mostrar_ipca:
+    referencias["ipca"] = "Só a inflação (IPCA)"
+if mostrar_selic:
+    referencias["selic"] = "Selic acumulada"
+if mostrar_igpm:
+    referencias["igpm"] = "Só o IGP-M"
+
+if referencias:
+    idx = ui.indices(df, len(df))
+    if idx.empty:
+        st.caption("Não consegui reconstruir as séries de indexadores.")
+    else:
+        alinhado = (idx.reindex(idx.index.union(serie["data"]))
+                    .ffill().reindex(serie["data"]))
+        for col, rotulo in referencias.items():
+            if col not in alinhado.columns:
+                continue
+            base = alinhado[col].to_numpy()
+            if not np.isfinite(base[0]) or base[0] == 0:
+                continue
+            plot[rotulo] = pos.aplicado * base / base[0]
+
+cols_plot = [c for c in plot.columns if c != "data"]
+longo = plot.melt(id_vars="data", value_vars=cols_plot,
+                  var_name="serie", value_name="valor").dropna()
 
 st.altair_chart(
     alt.Chart(longo).mark_line(strokeWidth=2).encode(
         x=alt.X("data:T", title=None),
         y=alt.Y("valor:Q", title="R$", scale=alt.Scale(zero=False)),
         color=alt.Color("serie:N", title=None,
-                        scale=alt.Scale(domain=list(rotulos.values()),
-                                        range=cores),
-                        legend=alt.Legend(orient="top")),
+                        scale=alt.Scale(domain=cols_plot,
+                                        range=[PALETA[c] for c in cols_plot]),
+                        legend=alt.Legend(orient="top", columns=3)),
         tooltip=[alt.Tooltip("data:T", title="Data", format="%d/%m/%Y"),
                  alt.Tooltip("serie:N", title=""),
                  alt.Tooltip("valor:Q", title="R$", format=",.2f")],
-    ).properties(height=380),
+    ).properties(height=400),
     use_container_width=True,
 )
 
-with st.expander("Comparação com os indexadores", expanded=False):
-    idx = ui.indices(df, len(df))
-
-    if idx.empty:
-        st.caption("Não consegui reconstruir as séries de indexadores.")
-    else:
-        alinhado = (idx.reindex(idx.index.union(serie["data"]))
-                    .ffill()
-                    .reindex(serie["data"]))
-
-        comp = pd.DataFrame({"data": serie["data"].to_numpy()})
-        comp["Valor a mercado"] = serie["mercado_caixa"].to_numpy()
-        comp["Valor na curva"] = serie["curva_caixa"].to_numpy()
-
-        nomes = {"ipca": "Só a inflação (IPCA)", "selic": "Selic acumulada"}
-        if pos.indexador == "igpm":
-            nomes["igpm"] = "Só o IGP-M"
-
-        for col, rotulo in nomes.items():
-            if col not in alinhado.columns:
-                continue
-            base = alinhado[col].to_numpy()
-            if not np.isfinite(base[0]) or base[0] == 0:
-                continue
-            comp[rotulo] = pos.aplicado * base / base[0]
-
-        cols_comp = [c for c in comp.columns if c != "data"]
-        paleta = {
-            "Valor a mercado": ui.COR_MERCADO,
-            "Valor na curva": ui.COR_CURVA,
-            "Só a inflação (IPCA)": "#b8860b",
-            "Selic acumulada": "#6a7f8f",
-            "Só o IGP-M": "#8e6c9a",
-        }
-
-        longo_c = comp.melt(id_vars="data", value_vars=cols_comp,
-                            var_name="serie", value_name="valor").dropna()
-
-        st.altair_chart(
-            alt.Chart(longo_c).mark_line(strokeWidth=2).encode(
-                x=alt.X("data:T", title=None),
-                y=alt.Y("valor:Q", title="R$", scale=alt.Scale(zero=False)),
-                color=alt.Color(
-                    "serie:N", title=None,
-                    scale=alt.Scale(domain=cols_comp,
-                                    range=[paleta[c] for c in cols_comp]),
-                    legend=alt.Legend(orient="top", columns=2)),
-                tooltip=[alt.Tooltip("data:T", title="Data", format="%d/%m/%Y"),
-                         alt.Tooltip("serie:N", title=""),
-                         alt.Tooltip("valor:Q", title="R$", format=",.2f")],
-            ).properties(height=360),
-            use_container_width=True,
-        )
-
-        fim_c = comp.iloc[-1]
-        resumo = []
-        for c in cols_comp:
-            if pd.isna(fim_c[c]):
-                continue
-            resumo.append({
-                "Cenário": c,
-                "Valor final": ui.brl(fim_c[c]),
-                "Retorno": f"{(fim_c[c] / pos.aplicado - 1) * 100:+.2f}%",
-            })
-        st.dataframe(pd.DataFrame(resumo), hide_index=True,
-                     use_container_width=True)
-
+if len(cols_plot) > 2:
+    fim_plot = plot.iloc[-1]
+    st.dataframe(
+        pd.DataFrame([
+            {"Linha": c,
+             "Valor final": ui.brl(fim_plot[c]),
+             "Retorno": f"{(fim_plot[c] / pos.aplicado - 1) * 100:+.2f}%"}
+            for c in cols_plot if pd.notna(fim_plot[c])
+        ]),
+        hide_index=True, use_container_width=True,
+    )
+    if referencias:
         st.caption(
-            "As linhas dos indexadores mostram quanto o mesmo dinheiro valeria "
-            "se apenas acompanhasse o índice, sem juro real nenhum. Nada disso "
-            "vem de fonte externa: o VNA de cada data é extraído dos próprios "
+            "As linhas de indexador mostram quanto o mesmo dinheiro valeria se "
+            "apenas acompanhasse o índice, sem juro real nenhum. Elas não vêm "
+            "de fonte externa: o VNA de cada data é extraído dos próprios "
             "preços do Tesouro, e a razão entre dois VNAs é a variação "
-            "acumulada do indexador. Vale notar que o VNA embute a projeção de "
-            "inflação do mês corrente, então anda um pouco à frente do IPCA "
-            "divulgado pelo IBGE — é o índice que o título de fato paga. Todos "
-            "os valores são brutos, sem imposto de renda."
+            "acumulada do indexador. O VNA embute a projeção de inflação do "
+            "mês corrente, então anda um pouco à frente do IPCA do IBGE — é o "
+            "índice que o título de fato paga. Tudo bruto, sem imposto."
         )
 
 with st.expander("Ágio/deságio ao longo do tempo", expanded=False):
