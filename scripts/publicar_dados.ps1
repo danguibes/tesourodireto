@@ -43,8 +43,13 @@ Write-Host "Cabecalho confere."
 $copia = Join-Path $env:TEMP "precotaxatesourodireto.csv"
 Copy-Item -Path $Arquivo -Destination $copia -Force
 
+# Com Stop, o PowerShell 5.1 trata stderr redirecionado de exe como erro fatal;
+# aqui o stderr e esperado quando o release ainda nao existe.
+$ErrorActionPreference = "Continue"
 gh release view fonte --repo $Repo *> $null
-if ($LASTEXITCODE -ne 0) {
+$existe = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = "Stop"
+if (-not $existe) {
     Write-Host "Criando o release fonte."
     gh release create fonte --repo $Repo --target main --title "Fonte dos dados" `
         --notes "CSV do Tesouro Transparente baixado pelo navegador. Substituido a cada publicacao; nao e uma versao do software." `

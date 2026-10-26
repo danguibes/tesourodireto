@@ -98,17 +98,33 @@ como origem (não "Deploy from a branch"). Depois o workflow publica a cada
 commit em `main` e a cada envio do `publicar_dados.ps1`. Não há agendamento:
 sem CSV novo, não há o que publicar.
 
-## Domínio próprio
+## Lembrete ao entrar no Windows
 
-Em Settings → Pages → Custom domain, informe `tesourodireto.summalabore.com.br`
-e marque "Enforce HTTPS". No Registro.br, crie um CNAME desse subdomínio
-apontando para `danguibes.github.io`. O certificado sai automático em alguns
-minutos.
+A tarefa agendada **Tesouro Direto - atualizar dados** roda
+`scripts/atualizar_ao_logar.ps1` 5 minutos depois de entrar ou desbloquear o
+Windows, e pergunta no máximo uma vez por dia. Com o "Sim", abre o link no
+navegador padrão, espera o CSV em Downloads (até 5 minutos) e chama o
+`publicar_dados.ps1`. Se o arquivo for igual ao último enviado, avisa e não
+publica.
 
-Um detalhe: o GitHub precisa de um arquivo `CNAME` na raiz do site. Ao
-configurar pelo painel com o Pages servido por Actions, adicione o domínio em
-`site/CNAME` (uma linha, só o domínio) e faça commit, senão o ajuste se perde
-no próximo deploy.
+O script não baixa nada sozinho, de propósito: o portal só entrega o arquivo
+para navegador, e quem abre o navegador é você.
+
+Estado e registro ficam em `%LOCALAPPDATA%\tesourodireto\` (`log.txt`,
+`ultima_pergunta.txt`, `ultimo_hash.txt`). Para perguntar de novo no mesmo dia:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\atualizar_ao_logar.ps1 -Forcar
+```
+
+A tarefa foi criada em 26/10/2026 nesta máquina e não está no repositório:
+num computador novo, ela precisa ser registrada de novo (gatilhos de logon e
+de desbloqueio, atraso de 5 minutos, liberada na bateria).
+
+## Endereço
+
+O site fica em <https://danguibes.github.io/tesourodireto/>, sem domínio
+próprio — decisão de 26/10/2026.
 
 ## Rodar localmente
 
