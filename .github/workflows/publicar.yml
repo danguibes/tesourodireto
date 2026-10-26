@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           for f in site/index.html site/dados/meta.json site/dados/papeis.json \
                    site/dados/feriados.json site/dados/indices.json \
-                   site/dados/ultimo_dia.csv site/dados/recentes.csv; do
+                   site/dados/ultimo_dia.csv; do
             test -s "$f" || { echo "Faltou $f"; exit 1; }
           done
           echo "Papéis gerados: $(ls site/dados/p | wc -l)"

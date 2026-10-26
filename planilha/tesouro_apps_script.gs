@@ -1,5 +1,5 @@
 /**
- * Tesouro Direto — coleta diária de preços e taxas, a partir do site.
+ * Tesouro Direto — último preço e taxa de cada título, a partir do site.
  *
  * FONTE: Tesouro Transparente (Tesouro Nacional), conjunto de dados
  * "Taxas dos Títulos Ofertados pelo Tesouro Direto", licença aberta ODbL.
@@ -9,13 +9,8 @@
  * servidores do Google (e a qualquer script) com uma página de desafio em
  * JavaScript no lugar do CSV. O arquivo agora é baixado no navegador e
  * publicado em https://danguibes.github.io/tesourodireto/, que o Google lê
- * sem problema. Este script lê de lá:
- *
- *   dados/recentes.csv   os últimos 30 dias úteis, todos os títulos
- *
- * Por isso ele PREENCHE OS BURACOS: se ficou dias sem rodar (ou se o site
- * ficou dias sem atualizar), grava todas as datas base que faltam, até 30
- * dias úteis para trás. Não grava a mesma data base duas vezes.
+ * sem problema. Este script lê de lá o dados/ultimo_dia.csv e REESCREVE a aba
+ * com os títulos do dia mais recente — uma linha por título, sem histórico.
  *
  * OBSERVAÇÕES IMPORTANTES
  *  - Os preços são os de ABERTURA do dia útil ("Manhã"), não intradiários.
@@ -26,13 +21,12 @@
  *
  * COMO USAR
  *  1. Extensões > Apps Script, substitua o código antigo por este e salve.
- *  2. Rode "testarConexao" — confirma acesso e mostra a data mais recente.
- *  3. Rode "atualizarTesouro" (pede autorização da conta na primeira vez).
- *  4. Rode "criarGatilhoDiario" uma vez, para automatizar. Ele apaga o
+ *  2. Rode "atualizarTesouro" (pede autorização da conta na primeira vez).
+ *  3. Rode "criarGatilhoDiario" uma vez, para automatizar. Ele apaga o
  *     gatilho antigo antes de criar o novo.
  */
 
-const URL_RECENTES = 'https://danguibes.github.io/tesourodireto/dados/recentes.csv';
+const URL_ULTIMO_DIA = 'https://danguibes.github.io/tesourodireto/dados/ultimo_dia.csv';
 const CABECALHO_FONTE =
   'Data base;Titulo;Vencimento;Taxa de compra;Taxa de venda;PU de compra;PU de venda';
 
@@ -50,25 +44,15 @@ const CABECALHO = [
 ];
 
 
-/** Função principal: grava na aba todas as datas base que ainda faltam. */
+/** Função principal: troca o conteúdo da aba pelos títulos do último dia. */
 function atualizarTesouro() {
-  const linhas = baixarRecentes_();
+  const linhas = baixarUltimoDia_();
   if (!linhas.length) {
     throw new Error('O arquivo do site veio sem nenhum título.');
   }
 
-  const aba = obterAba_();
-  const jaTem = datasRegistradas_(aba);
-  const novas = linhas.filter(function (l) { return !jaTem[chave_(l.dataBase)]; });
-
-  if (!novas.length) {
-    Logger.log('Nenhuma data base nova. A mais recente no site é ' +
-               texto_(linhas[linhas.length - 1].dataBase) + '.');
-    return;
-  }
-
   const agora = new Date();
-  const valores = novas.map(function (l) {
+  const valores = linhas.map(function (l) {
     return [
       l.dataBase, l.titulo, l.vencimento,
       l.taxaCompra, l.taxaVenda,
@@ -77,24 +61,28 @@ function atualizarTesouro() {
     ];
   });
 
-  const inicio = aba.getLastRow() + 1;
-  aba.getRange(inicio, 1, valores.length, CABECALHO.length).setValues(valores);
-  aba.getRange(inicio, 1, valores.length, 1).setNumberFormat('dd/mm/yyyy');
-  aba.getRange(inicio, 3, valores.length, 1).setNumberFormat('dd/mm/yyyy');
-  aba.getRange(inicio, 4, valores.length, 2).setNumberFormat('#,##0.0000');
-  aba.getRange(inicio, 6, valores.length, 2).setNumberFormat('#,##0.00');
-  aba.getRange(inicio, 8, valores.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+  const aba = obterAba_();
+  // Limpa só o corpo da tabela, para não apagar o que houver ao lado dela.
+  if (aba.getLastRow() > 1) {
+    aba.getRange(2, 1, aba.getLastRow() - 1, CABECALHO.length).clearContent();
+  }
 
-  const datas = {};
-  novas.forEach(function (l) { datas[texto_(l.dataBase)] = true; });
-  Logger.log(valores.length + ' linhas gravadas, ' + Object.keys(datas).length +
-             ' data(s) base: ' + Object.keys(datas).join(', ') + '.');
+  const n = valores.length;
+  aba.getRange(2, 1, n, CABECALHO.length).setValues(valores);
+  aba.getRange(2, 1, n, 1).setNumberFormat('dd/mm/yyyy');
+  aba.getRange(2, 3, n, 1).setNumberFormat('dd/mm/yyyy');
+  aba.getRange(2, 4, n, 2).setNumberFormat('#,##0.00');
+  aba.getRange(2, 6, n, 2).setNumberFormat('#,##0.00');
+  aba.getRange(2, 8, n, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+
+  Logger.log(n + ' títulos gravados, data base ' +
+             Utilities.formatDate(linhas[0].dataBase, FUSO, 'dd/MM/yyyy') + '.');
 }
 
 
-/** Baixa o recentes.csv do site e devolve as linhas já convertidas. */
-function baixarRecentes_() {
-  const resposta = UrlFetchApp.fetch(URL_RECENTES, { muteHttpExceptions: true });
+/** Baixa o ultimo_dia.csv do site e devolve as linhas já convertidas. */
+function baixarUltimoDia_() {
+  const resposta = UrlFetchApp.fetch(URL_ULTIMO_DIA, { muteHttpExceptions: true });
   const codigo = resposta.getResponseCode();
   if (codigo !== 200) {
     throw new Error('O site respondeu com código HTTP ' + codigo + '.');
@@ -123,10 +111,10 @@ function baixarRecentes_() {
 }
 
 
-/** "1234,56" ou "7,53" -> número. O site não usa separador de milhar. */
+/** "3486,38" ou "7,53" -> número. O site não usa separador de milhar. */
 function paraNumero_(valor) {
   if (valor === undefined || valor === null) return '';
-  const n = parseFloat(String(valor).trim().replace(/\./g, '').replace(',', '.'));
+  const n = parseFloat(String(valor).trim().replace(',', '.'));
   return isNaN(n) ? '' : n;
 }
 
@@ -136,17 +124,6 @@ function paraData_(valor) {
   const p = String(valor).trim().split('/');
   if (p.length !== 3) throw new Error('Data inválida no arquivo: ' + valor);
   return new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
-}
-
-
-function texto_(data) {
-  return Utilities.formatDate(data, FUSO, 'dd/MM/yyyy');
-}
-
-
-/** Chave de comparação de datas: aceita Date ou texto dd/mm/aaaa da planilha. */
-function chave_(v) {
-  return (v instanceof Date) ? texto_(v) : String(v).trim();
 }
 
 
@@ -171,18 +148,6 @@ function obterAba_() {
 }
 
 
-/** Conjunto das datas base já gravadas na aba (coluna A). */
-function datasRegistradas_(aba) {
-  const ultima = aba.getLastRow();
-  const vistas = {};
-  if (ultima < 2) return vistas;
-  aba.getRange(2, 1, ultima - 1, 1).getValues().forEach(function (linha) {
-    if (linha[0]) vistas[chave_(linha[0])] = true;
-  });
-  return vistas;
-}
-
-
 /** Agenda a execução automática, todo dia entre 20h e 21h. */
 function criarGatilhoDiario() {
   ScriptApp.getProjectTriggers().forEach(function (g) {
@@ -197,15 +162,4 @@ function criarGatilhoDiario() {
     .create();
 
   Logger.log('Gatilho diário criado (20h, horário de Brasília).');
-}
-
-
-/** Diagnóstico: testa o acesso sem escrever nada na planilha. */
-function testarConexao() {
-  const linhas = baixarRecentes_();
-  const datas = {};
-  linhas.forEach(function (l) { datas[texto_(l.dataBase)] = true; });
-  const lista = Object.keys(datas);
-  Logger.log(linhas.length + ' linhas, ' + lista.length + ' dias úteis, de ' +
-             lista[0] + ' a ' + lista[lista.length - 1] + '.');
 }

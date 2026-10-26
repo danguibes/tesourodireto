@@ -57,7 +57,7 @@ python teste_simulacao.py
 ```
 site/                   a página publicada (ver LEIA-ME-PAGES.md)
 scripts/                gerador de dados e scripts de publicação
-planilha/               Apps Script da planilha do Google
+planilha/               Apps Script da planilha do Google (último dia)
 referencia/             teste do port JavaScript contra o Python
 tesouro_core.py         calendário, fluxos de caixa e precificação
 tesouro_dados.py        montagem das séries (usado pelo teste)
