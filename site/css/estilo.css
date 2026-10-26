@@ -390,6 +390,28 @@ details[open] > summary::before { content: "−"; }
   font-weight: 400;
 }
 
+.botao.fraco[aria-pressed="true"] {
+  border-color: var(--curva);
+  color: var(--curva);
+  font-weight: 500;
+}
+
+.periodos { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+.periodos .botao { padding: 0.3rem 0.75rem; font-size: 0.86rem; }
+
+.subtitulo { font-size: 0.95rem; font-weight: 500; margin: 1.25rem 0 0.5rem; }
+
+.salva {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 0.6rem 1rem;
+  border-left: 3px solid var(--curva);
+  background: var(--superficie);
+  padding: 0.6rem 1rem;
+  margin: 1rem 0;
+  font-size: 0.88rem;
+}
+.salva .botao { padding: 0.3rem 0.75rem; font-size: 0.86rem; }
+
 .aviso {
   border-left: 3px solid var(--mercado);
   background: var(--superficie);

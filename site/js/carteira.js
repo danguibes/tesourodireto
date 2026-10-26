@@ -2,7 +2,8 @@
 
 import { simular, diaDeTexto, classificar } from "./tesouro.js";
 import * as D from "./dados.js";
-import { brl, num, pct, data, inteiro } from "./formato.js";
+import { brl, num, pct, data, inteiro, paraSegundos } from "./formato.js";
+import { desenharLinhas, desenharLegenda } from "./grafico.js";
 
 const MODELO =
   "data_compra;titulo;quantidade;vencimento;pu_compra\n" +
@@ -11,6 +12,34 @@ const MODELO =
   "02/09/2025;Tesouro Renda+ Aposentadoria Extra 2030;4,2;;\n";
 
 let cal, lista, info;
+let graficos = [];
+
+// A última planilha fica só neste navegador (localStorage), nunca sai dele.
+// O acesso pode lançar em janela anônima ou com dados bloqueados, e aí a
+// tela só deixa de lembrar — continua funcionando.
+const CHAVE = "tesourodireto.carteira.v1";
+
+function guardar(nome, texto) {
+  try {
+    localStorage.setItem(CHAVE, JSON.stringify({ nome, texto, em: Date.now() }));
+  } catch { /* sem armazenamento: segue sem lembrar */ }
+}
+
+function lerGuardada() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHAVE));
+    return v && typeof v.texto === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function esquecer() {
+  try { localStorage.removeItem(CHAVE); } catch { /* idem */ }
+}
+
+// Janelas do histórico, em dias corridos; null é desde a primeira compra.
+const PERIODOS = [["30 dias", 30], ["90 dias", 90], ["1 ano", 365], ["Tudo", null]];
 
 export async function montar(trilho, palco) {
   [cal, lista, info] = await Promise.all([
@@ -46,6 +75,7 @@ export async function montar(trilho, palco) {
       <p class="nota" style="margin-bottom:0">CSV separado por ponto e vírgula
         ou por vírgula.</p>
     </div>
+    <div id="salva"></div>
     <div id="saida"></div>
     <section class="secao">
       <details><summary>Como montar a planilha</summary>
@@ -69,7 +99,7 @@ export async function montar(trilho, palco) {
   const inp = palco.querySelector("#inpArquivo");
 
   palco.querySelector("#btnEscolher").onclick = () => inp.click();
-  inp.onchange = () => inp.files[0] && processar(inp.files[0], palco);
+  inp.onchange = () => inp.files[0] && abrirArquivo(inp.files[0], palco);
 
   solta.addEventListener("dragover", (e) => {
     e.preventDefault(); solta.classList.add("sobre");
@@ -78,8 +108,47 @@ export async function montar(trilho, palco) {
   solta.addEventListener("drop", (e) => {
     e.preventDefault();
     solta.classList.remove("sobre");
-    if (e.dataTransfer.files[0]) processar(e.dataTransfer.files[0], palco);
+    if (e.dataTransfer.files[0]) abrirArquivo(e.dataTransfer.files[0], palco);
   });
+
+  const salva = lerGuardada();
+  if (salva && await processar(salva.texto, palco)) marcarSalva(palco, salva);
+}
+
+async function abrirArquivo(arquivo, palco) {
+  const texto = await arquivo.text();
+  // Só lembra planilha que rendeu ao menos uma posição.
+  if (await processar(texto, palco)) {
+    guardar(arquivo.name, texto);
+    marcarSalva(palco, lerGuardada());
+  }
+}
+
+function marcarSalva(palco, salva) {
+  const alvo = palco.querySelector("#salva");
+  if (!alvo || !salva) return;
+  const quando = new Date(salva.em).toLocaleDateString("pt-BR");
+  alvo.innerHTML = `<div class="salva">
+      <span>Carteira lembrada neste navegador: <b>${escapar(salva.nome)}</b>,
+        enviada em ${quando}. A planilha não sai do seu computador.</span>
+      <button class="botao fraco" id="btnEsquecer">Esquecer</button>
+    </div>`;
+  alvo.querySelector("#btnEsquecer").onclick = () => {
+    esquecer();
+    limparGraficos();
+    alvo.innerHTML = "";
+    palco.querySelector("#saida").innerHTML = "";
+  };
+}
+
+function escapar(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+function limparGraficos() {
+  for (const g of graficos) { g?._obs?.disconnect(); g?.destroy(); }
+  graficos = [];
 }
 
 // ---------------------------------------------------------------- planilha
@@ -125,16 +194,18 @@ function numeroBr(v) {
 
 // ------------------------------------------------------------ processamento
 
-async function processar(arquivo, palco) {
+/** Reprecifica a planilha e desenha o resultado; devolve se houve posição. */
+async function processar(texto, palco) {
   const saida = palco.querySelector("#saida");
+  limparGraficos();
   saida.innerHTML = `<div class="carregando">Reprecificando as posições…</div>`;
 
   let entradas;
   try {
-    entradas = lerCsv(await arquivo.text());
+    entradas = lerCsv(texto);
   } catch (e) {
     saida.innerHTML = `<div class="aviso">Não consegui ler a planilha: ${e.message}</div>`;
-    return;
+    return false;
   }
 
   const faltando = ["data_compra", "titulo"]
@@ -142,12 +213,12 @@ async function processar(arquivo, palco) {
   if (faltando.length) {
     saida.innerHTML =
       `<div class="aviso">A planilha precisa das colunas: ${faltando.join(", ")}.</div>`;
-    return;
+    return false;
   }
   if (!("quantidade" in entradas[0]) && !("valor_aplicado" in entradas[0])) {
     saida.innerHTML =
       `<div class="aviso">Informe uma coluna quantidade ou valor_aplicado.</div>`;
-    return;
+    return false;
   }
 
   const linhas = [], problemas = [];
@@ -199,13 +270,14 @@ async function processar(arquivo, palco) {
       taxa: pos.taxa, quantidade: pos.quantidade, aplicado,
       curva: serie.curvaCaixa[n], mercado: serie.mercadoCaixa[n],
       agio: serie.agio[n], agioPct: serie.agioPct[n],
+      serie: { dias: serie.data, curva: serie.curvaCaixa, mercado: serie.mercadoCaixa },
     });
   }
 
   if (!linhas.length) {
     saida.innerHTML = avisos(problemas) +
       `<div class="aviso">Nenhuma linha pôde ser processada.</div>`;
-    return;
+    return false;
   }
 
   const somar = (c) => linhas.reduce((s, l) => s + l[c], 0);
@@ -233,6 +305,26 @@ async function processar(arquivo, palco) {
     </section>
 
     <section class="secao">
+      <h2>Histórico: curva e mercado</h2>
+      <div class="periodos" id="periodos" role="group" aria-label="Período">
+        ${PERIODOS.map(([rot], i) => `<button class="botao fraco" data-i="${i}"
+          aria-pressed="${i === 0}">${rot}</button>`).join("")}
+      </div>
+      <div class="legenda" id="legHist"></div>
+      <div class="grafico" id="grafHist"></div>
+      <h3 class="subtitulo">Ágio sobre a curva, em reais</h3>
+      <div class="grafico" id="grafAgio"></div>
+      <details style="margin-top:1rem"><summary>Dia a dia</summary>
+        <div class="rolagem rolagemH" id="tabHist" style="margin-top:.6rem"></div>
+      </details>
+      <p class="prosa" style="margin-top:.9rem">Soma de todas as posições em
+        cada dia útil. Uma compra feita dentro do período entra na soma a partir
+        do dia dela, o que dá um degrau nas duas linhas e no ágio em %, porque a
+        base cresce. O ágio em reais quase não se mexe nesse dia — a compra nova
+        nasce com ágio perto de zero —, e por isso é ele que vai no gráfico.</p>
+    </section>
+
+    <section class="secao">
       <h2>Ágio por compra</h2>
       ${barras(linhas)}
       <p class="prosa" style="margin-top:.9rem">Cada barra é uma compra, não um
@@ -250,6 +342,74 @@ async function processar(arquivo, palco) {
     </section>`;
 
   saida.querySelector("#btnCsv").onclick = () => baixarCsv(linhas);
+
+  const botoes = [...saida.querySelectorAll("#periodos button")];
+  const mostrar = (i) => {
+    botoes.forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
+    desenharHistorico(saida, historico(linhas, PERIODOS[i][1]));
+  };
+  botoes.forEach((b, i) => { b.onclick = () => mostrar(i); });
+  mostrar(0);
+  return true;
+}
+
+// ---------------------------------------------------------------- histórico
+
+/**
+ * Soma curva e mercado de todas as posições em cada dia útil da janela.
+ *
+ * Cada posição contribui a partir do dia da compra. Se faltar o preço de um
+ * papel num dia, repete o último valor dele, para a soma não afundar por um
+ * buraco na série; depois do vencimento, o último valor (já em caixa) fica.
+ */
+function historico(linhas, diasCorridos) {
+  const ultimo = info.ultimaDataBase;
+  const primeira = Math.min(...linhas.map((l) => l.compra));
+  const desde = diasCorridos == null ? primeira : Math.max(primeira, ultimo - diasCorridos);
+
+  const dias = [...new Set(linhas.flatMap((l) =>
+    l.serie.dias.filter((d) => d >= desde && d <= ultimo)))].sort((a, b) => a - b);
+
+  const curva = new Array(dias.length).fill(0);
+  const mercado = new Array(dias.length).fill(0);
+
+  for (const l of linhas) {
+    const s = l.serie;
+    let j = 0, c = null, m = null;
+    for (let k = 0; k < dias.length; k++) {
+      while (j < s.dias.length && s.dias[j] <= dias[k]) {
+        c = s.curva[j]; m = s.mercado[j]; j++;
+      }
+      if (c != null) { curva[k] += c; mercado[k] += m; }
+    }
+  }
+
+  const agio = mercado.map((v, k) => v - curva[k]);
+  const agioPct = mercado.map((v, k) => (curva[k] ? (v / curva[k] - 1) * 100 : null));
+  return { dias, curva, mercado, agio, agioPct };
+}
+
+function desenharHistorico(saida, h) {
+  limparGraficos();
+  const x = h.dias.map(paraSegundos);
+  const linhasValor = [
+    { rotulo: "Na curva", cor: "curva", valores: h.curva },
+    { rotulo: "A mercado", cor: "mercado", valores: h.mercado },
+  ];
+  desenharLegenda(saida.querySelector("#legHist"), linhasValor);
+  graficos.push(desenharLinhas(saida.querySelector("#grafHist"), x, linhasValor,
+    { altura: 300 }));
+  graficos.push(desenharLinhas(saida.querySelector("#grafAgio"), x,
+    [{ rotulo: "Ágio", cor: "mercado", valores: h.agio }],
+    { altura: 180 }));
+
+  const n = h.dias.length;
+  saida.querySelector("#tabHist").innerHTML = `<table class="tabela"><thead><tr>
+      <th>Dia</th><th>Na curva</th><th>A mercado</th><th>Ágio</th><th>Ágio %</th>
+    </tr></thead><tbody>${Array.from({ length: n }, (_, i) => n - 1 - i).map((k) => `<tr>
+      <td>${data(h.dias[k])}</td><td>${brl(h.curva[k])}</td><td>${brl(h.mercado[k])}</td>
+      <td>${brl(h.agio[k])}</td><td>${pct(h.agioPct[k])}</td>
+    </tr>`).join("")}</tbody></table>`;
 }
 
 function avisos(problemas) {

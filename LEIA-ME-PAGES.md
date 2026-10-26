@@ -76,20 +76,27 @@ Rode isso sempre que mexer em `site/js/tesouro.js`.
 ## Planilha do Google
 
 O Apps Script que alimentava a planilha parou pelo mesmo motivo que o app: o
-portal do Tesouro responde 429 para os servidores do Google. Em vez de
-insistir, a planilha passa a ler o próprio site, que o Google acessa sem
-problema. Numa célula:
+portal do Tesouro não entrega o arquivo aos servidores do Google. A planilha
+passa a ler o próprio site, que o Google acessa sem problema. O site publica
+dois arquivos para isso, ambos separados por ponto e vírgula e com vírgula
+decimal:
 
 ```
-=IMPORTDATA("https://danguibes.github.io/tesourodireto/dados/ultimo_dia.csv")
+dados/ultimo_dia.csv   os títulos do dia mais recente
+dados/recentes.csv     os últimos 30 dias úteis
 ```
 
-São os títulos do dia mais recente, com taxa e PU de compra e de venda,
-separados por ponto e vírgula e com vírgula decimal. Some o Apps Script, o
-gatilho e a autorização da conta: a planilha se atualiza sozinha ao abrir.
+**Para histórico**, use o Apps Script de `planilha/tesouro_apps_script.gs`.
+Ele lê o `recentes.csv` e grava na aba `Resgate` todas as datas base que ainda
+faltam, então um dia sem rodar não vira buraco. Cole por cima do script antigo
+e rode `criarGatilhoDiario` uma vez.
 
-Para manter histórico em vez da foto do dia, aí sim vale um Apps Script —
-mas lendo essa mesma URL, não o portal.
+**Para a foto do dia** numa célula, sem script, o `IMPORTDATA` precisa saber o
+separador e a localidade; sem isso ele corta os números na vírgula decimal:
+
+```
+=IMPORTDATA("https://danguibes.github.io/tesourodireto/dados/ultimo_dia.csv"; ";"; "pt_BR")
+```
 
 ## Ligar o Pages
 

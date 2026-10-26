@@ -4,12 +4,21 @@ Simula a compra de um título público numa data passada e mostra, dia a dia,
 quanto ele valeria pelo cálculo nominal contratado (o "valor na curva") e
 quanto o mercado efetivamente pagava (a marcação a mercado).
 
-Duas páginas:
+No ar em <https://danguibes.github.io/tesourodireto/>, como site estático no
+GitHub Pages: o cálculo roda no navegador. Como os dados chegam lá está em
+[LEIA-ME-PAGES.md](LEIA-ME-PAGES.md).
+
+Duas telas:
 
 - **Simulação** — uma compra hipotética, com gráfico da curva contra o mercado,
   o ágio ao longo do tempo e os cupons ou amortizações recebidos no caminho.
 - **Carteira** — importa uma planilha com várias compras e devolve o ágio ou
-  deságio de cada posição, mais o consolidado.
+  deságio de cada posição, o consolidado e o histórico da carteira (curva,
+  mercado e ágio em 30 dias, 90 dias, 1 ano ou desde a primeira compra). A
+  última planilha fica lembrada no navegador, que não a envia a lugar nenhum.
+
+A versão anterior, em Streamlit, saiu em 26/10/2026; ela está no histórico do
+Git até o commit `83204b5`.
 
 ## Planilha da carteira
 
@@ -19,34 +28,17 @@ pode vir como aparece na corretora ("Tesouro IPCA+ 2035", "Tesouro Educa+
 para o vencimento real. Duas colunas opcionais cobrem casos específicos:
 `vencimento`, necessária quando o ano é ambíguo, e `pu_compra`, o preço que
 você realmente pagou. Em vez de `quantidade` é possível informar
-`valor_aplicado`. Aceita CSV e Excel.
+`valor_aplicado`. Aceita CSV separado por ponto e vírgula ou por vírgula.
 
-## Instalação
+## Python
+
+O Python ficou como gerador de dados e como referência do cálculo: o
+JavaScript de `site/js/tesouro.js` é testado contra `tesouro_core.py`.
 
 ```bash
 pip install -r requirements.txt
+python teste_simulacao.py
 ```
-
-## Uso
-
-```bash
-streamlit run app.py
-```
-
-O navegador abre em `http://localhost:8501`. No Windows, o atalho
-`abrir_simulador.bat` faz o mesmo com dois cliques.
-
-Na primeira execução o app baixa o histórico completo do Tesouro Transparente
-(~14 MB) e o converte para Parquet na pasta `dados/`. As execuções seguintes
-carregam em menos de um segundo. O cache expira em 20 horas, então basta abrir
-no dia seguinte para ter os dados novos; o botão "Atualizar histórico" força
-um download imediato.
-
-## Publicar no Streamlit Community Cloud
-
-O app roda sem alterações: o cache cai para a pasta temporária quando o disco
-da aplicação é somente-leitura, e o Parquet é reconstruído automaticamente
-depois de cada hibernação do contêiner.
 
 ## Títulos cobertos
 
@@ -63,12 +55,12 @@ depois de cada hibernação do contêiner.
 ## Estrutura
 
 ```
-app.py                  roteador das páginas
-paginas/simulacao.py    simulação de uma compra
-paginas/carteira.py     importação de planilha e consolidado
+site/                   a página publicada (ver LEIA-ME-PAGES.md)
+scripts/                gerador de dados e scripts de publicação
+planilha/               Apps Script da planilha do Google
+referencia/             teste do port JavaScript contra o Python
 tesouro_core.py         calendário, fluxos de caixa e precificação
-tesouro_dados.py        download, cache e montagem das séries
-ui_comum.py             carga compartilhada e resolução de nomes de título
+tesouro_dados.py        montagem das séries (usado pelo teste)
 teste_simulacao.py      testes com dados reais embutidos, roda sem rede
 ```
 

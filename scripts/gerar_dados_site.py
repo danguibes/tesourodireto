@@ -213,24 +213,35 @@ def main() -> None:
     if not args.arquivo:
         csv.unlink(missing_ok=True)
 
-    # CSV achatado com o último dia, para planilhas consumirem via IMPORTDATA.
-    # O Google Sheets não consegue mais ler o portal do Tesouro direto, mas lê
-    # o GitHub Pages sem problema.
-    ultimo = df["data_base"].max()
-    dia = df.loc[df["data_base"] == ultimo].sort_values(["titulo", "vencimento"])
-    linhas_csv = ["Data base;Titulo;Vencimento;Taxa de compra;Taxa de venda;"
+    # CSVs achatados para planilhas. O Google Sheets não consegue mais ler o
+    # portal do Tesouro, mas lê o GitHub Pages sem problema. ultimo_dia.csv
+    # serve ao IMPORTDATA; recentes.csv, com os últimos dias úteis, deixa o
+    # Apps Script preencher os dias em que ele não rodou.
+    def csv_planilha(sub: pd.DataFrame) -> str:
+        sub = sub.sort_values(["data_base", "titulo", "vencimento"])
+        linhas = ["Data base;Titulo;Vencimento;Taxa de compra;Taxa de venda;"
                   "PU de compra;PU de venda"]
-    for r in dia.itertuples():
-        linhas_csv.append(";".join([
-            f"{r.data_base:%d/%m/%Y}", r.titulo, f"{r.vencimento:%d/%m/%Y}",
-            f"{r.taxa_compra:.2f}".replace(".", ","),
-            f"{r.taxa_venda:.2f}".replace(".", ","),
-            f"{r.pu_compra:.2f}".replace(".", ","),
-            f"{r.pu_venda:.2f}".replace(".", ","),
-        ]))
-    (dados / "ultimo_dia.csv").write_text(
-        "\n".join(linhas_csv) + "\n", encoding="utf-8")
+        for r in sub.itertuples():
+            linhas.append(";".join([
+                f"{r.data_base:%d/%m/%Y}", r.titulo, f"{r.vencimento:%d/%m/%Y}",
+                f"{r.taxa_compra:.2f}".replace(".", ","),
+                f"{r.taxa_venda:.2f}".replace(".", ","),
+                f"{r.pu_compra:.2f}".replace(".", ","),
+                f"{r.pu_venda:.2f}".replace(".", ","),
+            ]))
+        return "\n".join(linhas) + "\n"
+
+    ultimo = df["data_base"].max()
+    dia = df.loc[df["data_base"] == ultimo]
+    (dados / "ultimo_dia.csv").write_text(csv_planilha(dia), encoding="utf-8")
     print(f"ultimo_dia.csv: {len(dia)} títulos em {ultimo:%d/%m/%Y}")
+
+    DIAS_RECENTES = 30
+    datas = sorted(df["data_base"].unique())[-DIAS_RECENTES:]
+    recentes = df.loc[df["data_base"].isin(datas)]
+    (dados / "recentes.csv").write_text(csv_planilha(recentes), encoding="utf-8")
+    print(f"recentes.csv: {len(recentes)} linhas em {len(datas)} dias úteis, "
+          f"de {pd.Timestamp(datas[0]):%d/%m/%Y} a {ultimo:%d/%m/%Y}")
 
     # Feriados ANBIMA, para o JS montar o mesmo calendário.
     feriados = sorted(d.isoformat() for d in tc._CAL.holidays)
