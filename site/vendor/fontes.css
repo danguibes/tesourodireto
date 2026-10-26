@@ -1,0 +1,22 @@
+/* Fontes embutidas: nenhum pedido a terceiros, nada quebra se um CDN cair. */
+
+@font-face {
+  font-family: Archivo; font-style: normal; font-weight: 400;
+  font-display: swap; src: url("fontes/archivo-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Archivo; font-style: normal; font-weight: 500;
+  font-display: swap; src: url("fontes/archivo-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Archivo; font-style: normal; font-weight: 600;
+  font-display: swap; src: url("fontes/archivo-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Spectral; font-style: normal; font-weight: 400;
+  font-display: swap; src: url("fontes/spectral-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Spectral; font-style: normal; font-weight: 500;
+  font-display: swap; src: url("fontes/spectral-latin-500-normal.woff2") format("woff2");
+}

@@ -1,10 +1,12 @@
-# Cache local de dados (baixado do Tesouro Transparente em tempo de execução)
-dados/
+# Dados gerados pelo GitHub Actions — nunca versionados
+site/dados/
+ultima_data.txt
+entrada/
+referencia/fixture/
 *.parquet
 *.csv
-*.parcial
 
-# Credenciais e segredos — nunca versionar
+# Credenciais e segredos
 credentials.json
 token.json
 client_secret*.json
@@ -13,14 +15,16 @@ service_account*.json
 *.key
 .env
 .env.*
-secrets.toml
-.streamlit/secrets.toml
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Node (só usado para rodar os testes locais)
+node_modules/
+package-lock.json
 
 # Sistema operacional / editores
 .DS_Store

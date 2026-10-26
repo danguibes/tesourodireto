@@ -1,0 +1,82 @@
+name: Publicar site
+
+# Gera os dados estáticos a partir do Tesouro Transparente e publica a página
+# no GitHub Pages. Nada é commitado no repositório: os dados vão direto no
+# artefato do Pages, então o histórico do Git não cresce com o tempo.
+#
+# O CSV não vem do portal: desde outubro de 2026 ele devolve um desafio em
+# JavaScript a qualquer script. Ele é baixado no navegador e sobe como anexo
+# do release `fonte` por scripts/publicar_dados.ps1, que também dispara este
+# workflow. Por isso não há agendamento: sem CSV novo, não há o que publicar.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install --quiet pandas requests bizdays python-dateutil numpy
+
+      - name: Baixar o CSV do release fonte
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download fonte --repo "$GITHUB_REPOSITORY" \
+            --pattern precotaxatesourodireto.csv --dir entrada
+          ls -l entrada
+
+      - name: Gerar os dados do site
+        run: python scripts/gerar_dados_site.py site --arquivo entrada/precotaxatesourodireto.csv
+
+      - name: Conferir que o site está completo
+        run: |
+          set -euo pipefail
+          for f in site/index.html site/dados/meta.json site/dados/papeis.json \
+                   site/dados/feriados.json site/dados/indices.json; do
+            test -s "$f" || { echo "Faltou $f"; exit 1; }
+          done
+          echo "Papéis gerados: $(ls site/dados/p | wc -l)"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Resumo
+        run: |
+          {
+            echo "### Site publicado"
+            echo ""
+            echo "- Data base mais recente: **$(cat ultima_data.txt)**"
+            echo "- Papéis: $(ls site/dados/p | wc -l)"
+            echo "- Tamanho dos dados: $(du -sh site/dados | cut -f1)"
+            echo "- Endereço: ${{ steps.deploy.outputs.page_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tesouro Direto — valor na curva e valor a mercado</title>
+<meta name="description" content="Simule a compra de um título público numa data passada e compare o valor teórico contratado com a marcação a mercado.">
+<meta name="color-scheme" content="light dark">
+
+<link rel="stylesheet" href="vendor/fontes.css">
+<link rel="stylesheet" href="vendor/uPlot.min.css">
+<link rel="stylesheet" href="css/estilo.css">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%230f4c5c'/><path d='M2 12 L7 7 L10 9 L14 4' stroke='white' stroke-width='1.6' fill='none'/></svg>">
+</head>
+<body>
+
+<div class="quadro">
+  <aside class="trilho">
+    <h1 class="marca">Curva e mercado<span>Títulos públicos do Tesouro Direto</span></h1>
+
+    <nav class="abas" id="abas" role="tablist">
+      <button data-tela="simulacao" role="tab" aria-selected="true">Simulação</button>
+      <button data-tela="carteira" role="tab" aria-selected="false">Carteira</button>
+    </nav>
+
+    <div id="controles"></div>
+  </aside>
+
+  <main class="palco" id="palco">
+    <div class="carregando">Carregando…</div>
+  </main>
+</div>
+
+<script src="vendor/uPlot.iife.min.js"></script>
+<script type="module" src="js/app.js"></script>
+
+<noscript>
+  <p style="padding:2rem">Este site faz todos os cálculos no seu navegador,
+  então precisa de JavaScript habilitado.</p>
+</noscript>
+
+</body>
+</html>

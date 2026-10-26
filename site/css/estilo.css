@@ -1,0 +1,448 @@
+/* Simulador Tesouro Direto — curva vs. mercado */
+
+:root {
+  --papel: #eef1f4;
+  --superficie: #ffffff;
+  --superficie-2: #e4e9ee;
+  --tinta: #15202b;
+  --tinta-fraca: #5d6b78;
+  --regua: #d2dae1;
+
+  --curva: #0f4c5c;
+  --mercado: #9e2a2b;
+  --reinvest: #7b8a97;
+  --ipca: #a8761f;
+  --selic: #5a6b7a;
+  --igpm: #6b4b7a;
+  --positivo: #2f6b3f;
+
+  --trilho: 310px;
+  --raio: 3px;
+
+  --passo: 1.5rem;
+  --prosa: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #10161c;
+    --superficie: #171f27;
+    --superficie-2: #1f2932;
+    --tinta: #e6ecf1;
+    --tinta-fraca: #94a3b1;
+    --regua: #2b3741;
+
+    --curva: #4bb3cc;
+    --mercado: #e0674f;
+    --reinvest: #8d9aa6;
+    --ipca: #d6a44c;
+    --selic: #8fa3b5;
+    --igpm: #a98ac0;
+    --positivo: #5fb073;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3 {
+  font-family: Spectral, Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+a { color: inherit; }
+
+button, select, input {
+  font: inherit;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--curva);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------- estrutura */
+
+.quadro {
+  display: grid;
+  grid-template-columns: var(--trilho) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.trilho {
+  background: var(--superficie);
+  border-right: 1px solid var(--regua);
+  padding: 1.75rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.palco {
+  padding: 2.25rem clamp(1.25rem, 3vw, 3rem) 5rem;
+  max-width: 1180px;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .quadro { grid-template-columns: 1fr; }
+  .trilho { border-right: 0; border-bottom: 1px solid var(--regua); }
+  .palco { padding-top: 1.5rem; }
+}
+
+/* ------------------------------------------------------------------ trilho */
+
+.marca {
+  font-family: Spectral, Georgia, serif;
+  font-size: 1.1rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.marca span {
+  display: block;
+  font-family: Archivo, sans-serif;
+  font-size: 0.78rem;
+  color: var(--tinta-fraca);
+  margin-top: 0.2rem;
+}
+
+.abas {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--regua);
+}
+
+.abas button {
+  flex: 1;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.5rem 0.25rem 0.6rem;
+  cursor: pointer;
+  color: var(--tinta-fraca);
+}
+
+.abas button[aria-selected="true"] {
+  color: var(--tinta);
+  border-bottom-color: var(--curva);
+}
+
+.campo { display: block; }
+
+.campo > span {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--tinta-fraca);
+  margin-bottom: 0.3rem;
+}
+
+.campo select,
+.campo input {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  background: var(--superficie-2);
+  border: 1px solid var(--regua);
+  border-radius: var(--raio);
+}
+
+.grupo { display: flex; flex-direction: column; gap: 0.85rem; }
+
+#controles { display: flex; flex-direction: column; gap: 1.6rem; }
+
+.grupo > h2 {
+  font-size: 0.82rem;
+  font-family: Archivo, sans-serif;
+  font-weight: 600;
+  color: var(--tinta-fraca);
+  margin-bottom: -0.2rem;
+}
+
+.marcador {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+.marcador input { width: auto; margin: 0; accent-color: var(--curva); }
+
+.marcador i {
+  width: 14px; height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  flex: none;
+  transform: translateY(-3px);
+}
+
+.nota {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--tinta-fraca);
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------- palco */
+
+.cabeca { margin-bottom: 1.75rem; }
+
+.cabeca h1 { font-size: clamp(1.5rem, 3.4vw, 2.1rem); }
+
+.cabeca p {
+  margin: 0.4rem 0 0;
+  color: var(--tinta-fraca);
+  max-width: var(--prosa);
+}
+
+/* O veredito é o único elemento emoldurado da página. */
+.veredito {
+  border-left: 3px solid var(--curva);
+  background: var(--superficie);
+  padding: 1.1rem 1.35rem;
+  margin-bottom: 1.75rem;
+  font-size: clamp(1.05rem, 2.1vw, 1.3rem);
+  line-height: 1.4;
+  max-width: var(--prosa);
+}
+
+.veredito.abaixo { border-left-color: var(--mercado); }
+.veredito strong { font-weight: 600; white-space: nowrap; }
+
+.cifras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.5rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--regua);
+  margin-bottom: 1.75rem;
+}
+
+.cifras div { padding: 0.2rem 0; }
+
+.cifras dt {
+  font-size: 0.78rem;
+  color: var(--tinta-fraca);
+}
+
+.cifras dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.22rem;
+  font-weight: 500;
+}
+
+.cifras .delta { font-size: 0.8rem; color: var(--tinta-fraca); }
+.delta.sobe { color: var(--positivo); }
+.delta.desce { color: var(--mercado); }
+
+/* ----------------------------------------------------------------- gráfico */
+
+.tela { margin-bottom: 2rem; }
+
+.legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.86rem;
+}
+
+.legenda span { display: inline-flex; align-items: baseline; gap: 0.45rem; }
+
+.legenda i {
+  width: 14px; height: 3px; border-radius: 2px;
+  background: currentColor; flex: none;
+  transform: translateY(-3px);
+}
+
+.grafico { width: 100%; }
+
+.uplot, .uplot * { font-family: Archivo, sans-serif !important; }
+.u-legend { display: none; }
+
+.dica {
+  position: absolute;
+  pointer-events: none;
+  background: var(--superficie);
+  border: 1px solid var(--regua);
+  border-radius: var(--raio);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.13);
+  z-index: 5;
+  white-space: nowrap;
+}
+
+.dica b { display: block; font-weight: 600; margin-bottom: 0.2rem; }
+.dica em { font-style: normal; color: var(--tinta-fraca); }
+
+/* ------------------------------------------------------------------ seções */
+
+.secao { border-top: 1px solid var(--regua); padding-top: 1.5rem; margin-top: 1.5rem; }
+
+.secao > h2 { font-size: 1.15rem; margin-bottom: 0.9rem; }
+
+details > summary {
+  cursor: pointer;
+  font-family: Spectral, Georgia, serif;
+  font-size: 1.1rem;
+  padding: 0.3rem 0;
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker { display: none; }
+
+details > summary::before {
+  content: "+";
+  display: inline-block;
+  width: 1.1em;
+  color: var(--tinta-fraca);
+  font-family: Archivo, sans-serif;
+}
+
+details[open] > summary::before { content: "−"; }
+
+.tabela { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+.tabela caption {
+  text-align: left;
+  color: var(--tinta-fraca);
+  font-size: 0.82rem;
+  padding-bottom: 0.5rem;
+}
+
+.tabela th, .tabela td {
+  text-align: right;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--regua);
+}
+
+.tabela th:first-child, .tabela td:first-child { text-align: left; padding-left: 0; }
+.tabela td:last-child, .tabela th:last-child { padding-right: 0; }
+
+.tabela thead th {
+  color: var(--tinta-fraca);
+  font-weight: 600;
+  font-size: 0.8rem;
+  border-bottom-color: var(--tinta-fraca);
+}
+
+.tabela tbody tr:last-child td { border-bottom: 0; }
+
+.rolagem { max-height: 340px; overflow: auto; }
+.rolagemH { overflow-x: auto; }
+
+/* Em tela estreita, tabela densa rola de lado em vez de espremer cada célula. */
+@media (max-width: 620px) {
+  .tabela { min-width: 480px; }
+}
+
+.prosa { max-width: var(--prosa); color: var(--tinta-fraca); font-size: 0.9rem; }
+.prosa p { margin: 0 0 0.7rem; }
+.prosa p:last-child { margin-bottom: 0; }
+
+/* ---------------------------------------------------------------- carteira */
+
+.solta {
+  border: 1px dashed var(--regua);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  padding: 2rem 1.5rem;
+  text-align: center;
+  max-width: var(--prosa);
+}
+
+.solta.sobre { border-color: var(--curva); background: var(--superficie-2); }
+
+.botao {
+  background: var(--curva);
+  color: #fff;
+  border: 0;
+  border-radius: var(--raio);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+@media (prefers-color-scheme: dark) { .botao { color: #0d1419; } }
+
+.botao.fraco {
+  background: none;
+  color: var(--tinta);
+  border: 1px solid var(--regua);
+  font-weight: 400;
+}
+
+.aviso {
+  border-left: 3px solid var(--mercado);
+  background: var(--superficie);
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.88rem;
+  max-width: var(--prosa);
+}
+
+.barras { display: grid; gap: 0.3rem; margin: 0; }
+
+.barras .linha {
+  display: grid;
+  grid-template-columns: minmax(150px, 270px) 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.86rem;
+}
+
+.barras .linha > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barras .trilhoBarra {
+  position: relative;
+  height: 20px;
+  background: linear-gradient(to right,
+    transparent calc(50% - 0.5px), var(--regua) calc(50% - 0.5px),
+    var(--regua) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+}
+
+.barras .barra {
+  position: absolute;
+  top: 3px; bottom: 3px;
+  background: var(--mercado);
+}
+
+.barras .barra.pos { background: var(--positivo); }
+
+.barras .valor {
+  position: absolute;
+  top: 0;
+  font-size: 0.78rem;
+  color: var(--tinta-fraca);
+  line-height: 20px;
+}
+
+.carregando { color: var(--tinta-fraca); padding: 2rem 0; }
+
+.esconde { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
