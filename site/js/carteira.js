@@ -124,19 +124,40 @@ async function abrirArquivo(arquivo, palco) {
   }
 }
 
+/**
+ * Com carteira carregada, a área grande de envio dá lugar a uma faixa de uma
+ * linha: nome do arquivo, trocar e esquecer. A faixa também aceita arrastar.
+ */
 function marcarSalva(palco, salva) {
   const alvo = palco.querySelector("#salva");
+  const solta = palco.querySelector("#solta");
   if (!alvo || !salva) return;
   const quando = new Date(salva.em).toLocaleDateString("pt-BR");
-  alvo.innerHTML = `<div class="salva">
-      <span>Carteira lembrada neste navegador: <b>${escapar(salva.nome)}</b>,
-        enviada em ${quando}. A planilha não sai do seu computador.</span>
-      <button class="botao fraco" id="btnEsquecer">Esquecer</button>
+  alvo.innerHTML = `<div class="salva" title="A planilha fica só neste navegador; ela não é enviada a lugar nenhum.">
+      <span><b>${escapar(salva.nome)}</b>
+        <span class="nota">· lembrada neste navegador desde ${quando}</span></span>
+      <span class="acoes">
+        <button class="botao fraco" id="btnTrocar">Trocar planilha</button>
+        <button class="botao fraco" id="btnEsquecer">Esquecer</button>
+      </span>
     </div>`;
+  solta.classList.add("esconde");
+
+  const faixa = alvo.querySelector(".salva");
+  alvo.querySelector("#btnTrocar").onclick = () => palco.querySelector("#inpArquivo").click();
+  faixa.addEventListener("dragover", (e) => { e.preventDefault(); faixa.classList.add("sobre"); });
+  faixa.addEventListener("dragleave", () => faixa.classList.remove("sobre"));
+  faixa.addEventListener("drop", (e) => {
+    e.preventDefault();
+    faixa.classList.remove("sobre");
+    if (e.dataTransfer.files[0]) abrirArquivo(e.dataTransfer.files[0], palco);
+  });
+
   alvo.querySelector("#btnEsquecer").onclick = () => {
     esquecer();
     limparGraficos();
     alvo.innerHTML = "";
+    solta.classList.remove("esconde");
     palco.querySelector("#saida").innerHTML = "";
   };
 }

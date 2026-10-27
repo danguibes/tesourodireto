@@ -403,14 +403,19 @@ details[open] > summary::before { content: "−"; }
 
 .salva {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 0.6rem 1rem;
+  gap: 0.4rem 1rem;
+  border: 1px solid var(--regua);
   border-left: 3px solid var(--curva);
+  border-radius: var(--raio);
   background: var(--superficie);
-  padding: 0.6rem 1rem;
-  margin: 1rem 0;
+  padding: 0.4rem 0.5rem 0.4rem 0.9rem;
+  margin: 0 0 0.5rem;
   font-size: 0.88rem;
 }
-.salva .botao { padding: 0.3rem 0.75rem; font-size: 0.86rem; }
+.salva.sobre { border-color: var(--curva); background: var(--superficie-2); }
+.salva .nota { margin: 0; }
+.salva .acoes { display: flex; gap: 0.4rem; }
+.salva .botao { padding: 0.25rem 0.7rem; font-size: 0.84rem; }
 
 .aviso {
   border-left: 3px solid var(--mercado);
