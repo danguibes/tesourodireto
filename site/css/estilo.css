@@ -422,8 +422,9 @@ details[open] > summary::before { content: "−"; }
   font-weight: 500;
 }
 
-@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .botao { color: #0d1419; } }
-:root[data-tema="escuro"] .botao { color: #0d1419; }
+/* :where zera o peso do tema, senão esta regra venceria a do .botao.fraco. */
+@media (prefers-color-scheme: dark) { :where(:root:not([data-tema="claro"])) .botao { color: #0d1419; } }
+:where(:root[data-tema="escuro"]) .botao { color: #0d1419; }
 
 .botao.fraco {
   background: none;
