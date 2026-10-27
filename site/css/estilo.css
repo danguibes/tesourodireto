@@ -520,3 +520,21 @@ details[open] > summary::before { content: "−"; }
 .tabela tr.total td { font-weight: 600; border-top: 1px solid var(--regua); }
 .tabela sup { color: var(--tinta-fraca); margin-left: 1px; }
 .controle label { display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.8rem; }
+
+/* Blocos recolhíveis da carteira: <details class="secao bloco"> com o h2 no summary. */
+.bloco > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 0.6rem;
+}
+.bloco > summary::-webkit-details-marker { display: none; }
+.bloco > summary::before {
+  content: ""; flex: none;
+  width: 0.45rem; height: 0.45rem;
+  border-right: 1.5px solid var(--tinta-fraca); border-bottom: 1.5px solid var(--tinta-fraca);
+  transform: rotate(-45deg); transition: transform 0.15s;
+}
+.bloco[open] > summary::before { transform: rotate(45deg); }
+.bloco > summary h2 { font-size: 1.15rem; margin: 0; }
+.bloco[open] > summary { margin-bottom: 0.9rem; }
+.bloco > summary:hover h2 { color: var(--curva); }
+.bloco > summary:focus-visible { outline: 2px solid var(--curva); outline-offset: 3px; }

@@ -172,6 +172,49 @@ function marcarSalva(palco, salva) {
   };
 }
 
+// --------------------------------------------------------- blocos recolhíveis
+
+// Tabelas de conferência começam fechadas; o resto, aberto. O que a pessoa
+// abre ou fecha fica lembrado neste navegador, pelo título do bloco.
+const BLOCOS_FECHADOS = ["Saldo por papel", "Posição a posição", "Vendas realizadas"];
+const CHAVE_BLOCOS = "tesourodireto.blocos.v1";
+
+function lerBlocos() {
+  try { return JSON.parse(localStorage.getItem(CHAVE_BLOCOS)) || {}; } catch { return {}; }
+}
+
+/**
+ * Troca cada <section class="secao"> com <h2> por um <details> equivalente,
+ * com o <h2> dentro do <summary>. Os nós são movidos, não recriados, então
+ * ids e eventos já ligados continuam valendo.
+ */
+function tornarRecolhiveis(raiz) {
+  const estado = lerBlocos();
+  for (const sec of raiz.querySelectorAll(":scope > section.secao")) {
+    const h2 = sec.querySelector(":scope > h2");
+    if (!h2) continue;
+    // "Consolidado em 23/10/2026" vira "Consolidado em", que não muda com a data.
+    const nome = h2.textContent.replace(/\s+\d{2}\/\d{2}\/\d{4}\s*$/, "").trim();
+    const det = document.createElement("details");
+    det.className = "secao bloco";
+    const padrao = !BLOCOS_FECHADOS.includes(nome);
+    det.open = nome in estado ? estado[nome] : padrao;
+    const sum = document.createElement("summary");
+    sec.before(det);
+    sum.appendChild(h2);
+    det.appendChild(sum);
+    while (sec.firstChild) det.appendChild(sec.firstChild);
+    sec.remove();
+    // O navegador também dispara "toggle" ao montar; por isso só se guarda o
+    // que difere do padrão, e o padrão pode mudar depois sem ficar congelado.
+    det.addEventListener("toggle", () => {
+      const atual = lerBlocos();
+      if (det.open === padrao) delete atual[nome]; else atual[nome] = det.open;
+      try { localStorage.setItem(CHAVE_BLOCOS, JSON.stringify(atual)); } catch { /* só não lembra */ }
+    });
+  }
+}
+
 function escapar(s) {
   return String(s).replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -488,6 +531,7 @@ async function processar(texto, palco) {
       <div class="aviso">Nenhuma posição em aberto: tudo o que foi comprado já foi
         vendido.</div>
       ${secaoSaldo(lotes)}${secaoVendas(vendas)}`;
+    tornarRecolhiveis(saida);
     return true;
   }
 
@@ -596,6 +640,7 @@ async function processar(texto, palco) {
 
     ${secaoVendas(vendas)}`;
 
+  tornarRecolhiveis(saida);
   saida.querySelector("#btnCsv").onclick = () => baixarCsv(linhas);
 
   // O histórico pode ser filtrado por papel (título + vencimento) clicando
@@ -645,7 +690,9 @@ async function processar(texto, palco) {
     if (!linha) return;
     filtro = filtro === linha.dataset.chave ? null : linha.dataset.chave;
     mostrar();
-    saida.querySelector("#tituloHist").scrollIntoView({ behavior: "smooth", block: "start" });
+    const titulo = saida.querySelector("#tituloHist");
+    titulo.closest("details").open = true;
+    titulo.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const listaBarras = saida.querySelector(".barras");
   listaBarras.addEventListener("click", (e) => escolher(e.target.closest(".linha")));
