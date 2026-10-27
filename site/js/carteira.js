@@ -8,10 +8,11 @@ import { brl, num, pct, data, inteiro, paraSegundos } from "./formato.js";
 import { desenharLinhas, desenharLegenda } from "./grafico.js";
 
 const MODELO =
-  "data_compra;titulo;quantidade;vencimento;pu_compra\n" +
-  "30/01/2023;Tesouro IPCA+ 2035;1,5;;\n" +
-  "15/06/2024;Tesouro Prefixado 2029;10;;\n" +
-  "02/09/2025;Tesouro Renda+ Aposentadoria Extra 2030;4,2;;\n";
+  "data;operacao;titulo;quantidade;vencimento;pu\n" +
+  "30/01/2023;compra;Tesouro IPCA+ 2035;1,5;;\n" +
+  "15/06/2024;compra;Tesouro Prefixado 2029;10;;\n" +
+  "02/09/2025;compra;Tesouro Renda+ Aposentadoria Extra 2030;4,2;;\n" +
+  "10/03/2026;venda;Tesouro Prefixado 2029;4;;\n";
 
 let cal, lista, info;
 let graficos = [];
@@ -49,9 +50,10 @@ export async function montar(trilho, palco) {
 
   trilho.innerHTML = `
     <div class="grupo">
-      <h2>Planilha de compras</h2>
-      <p class="nota">Três colunas bastam: <b>data_compra</b>, <b>titulo</b> e
-        <b>quantidade</b>. O título pode vir como aparece na corretora.</p>
+      <h2>Planilha de operações</h2>
+      <p class="nota">Uma linha por compra ou venda: <b>data</b>,
+        <b>operacao</b>, <b>titulo</b> e <b>quantidade</b>. O título pode vir
+        como aparece na corretora.</p>
       <button class="botao fraco" id="btnModelo">Baixar modelo em CSV</button>
     </div>
     <p class="nota">Dados até ${info.ultimaDataBaseTexto}.</p>`;
@@ -67,8 +69,8 @@ export async function montar(trilho, palco) {
   palco.innerHTML = `
     <header class="cabeca">
       <h1>Carteira</h1>
-      <p>Suba uma planilha com as suas compras e veja o ágio ou deságio de cada
-         posição na data mais recente disponível.</p>
+      <p>Suba uma planilha com as suas compras e vendas e veja o ágio ou deságio
+         de cada posição na data mais recente disponível.</p>
     </header>
     <div class="solta" id="solta">
       <p style="margin-top:0">Arraste o arquivo aqui, ou</p>
@@ -82,17 +84,23 @@ export async function montar(trilho, palco) {
     <section class="secao">
       <details><summary>Como montar a planilha</summary>
         <div class="prosa" style="padding-top:.6rem">
-          <p>Obrigatórias: <b>data_compra</b>, <b>titulo</b> e
-            <b>quantidade</b>. Em vez de quantidade você pode informar
-            <b>valor_aplicado</b> em reais.</p>
+          <p>Obrigatórias: <b>data</b>, <b>titulo</b> e <b>quantidade</b>. Em
+            vez de quantidade, uma compra pode informar <b>valor_aplicado</b> em
+            reais; uma venda precisa da quantidade.</p>
+          <p><b>operacao</b> diz se a linha é <b>compra</b> ou <b>venda</b> (também
+            vale C, V, aplicação ou resgate). Sem essa coluna, tudo é compra — as
+            planilhas antigas, com <b>data_compra</b>, continuam funcionando.
+            Cada venda sai primeiro das compras mais antigas do mesmo papel, a
+            regra que o Tesouro Direto usa para o imposto de renda.</p>
           <p>O ano no nome do RendA+ e do Educa+ é o da conversão, e o site já
             traduz para o vencimento real: RendA+ 2030 vence em 15/12/2049,
             Educa+ 2026 em 15/12/2030.</p>
           <p>Duas colunas opcionais cobrem casos específicos.
             <b>vencimento</b> é necessária quando o ano sozinho é ambíguo, como
             no Tesouro IPCA+ 2026, que vence em maio e em agosto.
-            <b>pu_compra</b> é o preço que você realmente pagou; sem ela, o site
-            usa o preço de abertura publicado naquele dia.</p>
+            <b>pu</b> é o preço que você realmente pagou ou recebeu por título;
+            sem ela, o site usa o preço publicado naquele dia (de compra numa
+            compra, de venda numa venda).</p>
         </div>
       </details>
     </section>`;
@@ -215,6 +223,208 @@ function numeroBr(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// ------------------------------------------------------ compras e vendas
+
+/** "compra", "C", "aplicação" → compra; "venda", "V", "resgate" → venda. */
+function operacaoDe(v) {
+  const s = String(v ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .trim().toLowerCase();
+  if (!s || s.startsWith("c") || s.startsWith("aplica")) return "compra";
+  if (s.startsWith("v") || s.startsWith("resgat")) return "venda";
+  return null;
+}
+
+/** Último índice com dia <= d (o pregão vigente naquela data). */
+function idxAte(dias, d) {
+  let k = -1;
+  for (let i = 0; i < dias.length && dias[i] <= d; i++) k = i;
+  return k;
+}
+
+/**
+ * Lê as operações e devolve as compras ("lotes") já abatidas pelas vendas.
+ *
+ * Cada compra é simulada para UMA unidade; como curva, mercado e ágio são
+ * lineares na quantidade, o valor da posição em cada dia é a série unitária
+ * vezes a quantidade que ainda estava em carteira naquele dia. As vendas
+ * abatem primeiro das compras mais antigas do mesmo papel (PEPS, a regra do
+ * Tesouro Direto para o imposto de renda). No mesmo dia, compras entram antes
+ * das vendas. Venda maior que o saldo daquela data é recusada inteira.
+ */
+async function montarLotes(entradas, colData, problemas) {
+  const ops = [];
+  entradas.forEach((e, i) => {
+    const rot = `linha ${i + 2}`;
+    const tipo = operacaoDe(e.operacao ?? e.tipo);
+    if (!tipo) {
+      problemas.push(`${rot}: operação “${e.operacao ?? e.tipo}” não reconhecida; use compra ou venda`);
+      return;
+    }
+    let dia;
+    try { dia = diaDeTexto(e[colData]); } catch {
+      problemas.push(`${rot}: data inválida (“${e[colData]}”)`);
+      return;
+    }
+    let venc = null;
+    if (e.vencimento) {
+      try { venc = diaDeTexto(e.vencimento); } catch { venc = null; }
+    }
+    const achado = D.resolverTitulo(lista, e.titulo, venc);
+    if (!achado.papel) { problemas.push(`${rot}: ${achado.erro}`); return; }
+
+    const qtd = numeroBr(e.quantidade);
+    const val = numeroBr(e.valor_aplicado);
+    if (tipo === "venda" && !(qtd > 0)) {
+      problemas.push(`${rot}: venda precisa da quantidade vendida`);
+      return;
+    }
+    if (tipo === "compra" && !Number.isFinite(qtd) && !Number.isFinite(val)) {
+      problemas.push(`${rot}: sem quantidade nem valor aplicado`);
+      return;
+    }
+    const pu = numeroBr(e.pu ?? e.pu_compra ?? e.pu_venda);
+    ops.push({ rot, ordem: i, tipo, dia, papel: achado.papel, qtd, val, pu });
+  });
+
+  const grupos = new Map();
+  for (const op of ops) {
+    if (!grupos.has(op.papel.id)) grupos.set(op.papel.id, []);
+    grupos.get(op.papel.id).push(op);
+  }
+
+  const lotes = [], vendas = [];
+  for (const [id, grupo] of grupos) {
+    grupo.sort((a, b) => a.dia - b.dia
+      || (a.tipo === b.tipo ? 0 : a.tipo === "compra" ? -1 : 1)
+      || a.ordem - b.ordem);
+    const dados = await D.papel(id);
+    const fila = [];
+
+    for (const op of grupo) {
+      if (op.tipo === "compra") {
+        let res;
+        try { res = simular(cal, dados, op.dia, { quantidade: 1 }); } catch (err) {
+          problemas.push(`${op.rot}: ${err.message}`);
+          continue;
+        }
+        const q = Number.isFinite(op.qtd) ? op.qtd : op.val / res.pos.puCompra;
+        if (!(q > 0)) { problemas.push(`${op.rot}: quantidade inválida`); continue; }
+        const lote = { res, original: q, restante: q, saidas: [], puInf: op.pu };
+        fila.push(lote);
+        lotes.push(lote);
+        continue;
+      }
+
+      const saldo = fila.reduce((s, l) => s + l.restante, 0);
+      if (op.qtd > saldo + 1e-9) {
+        problemas.push(`${op.rot}: venda de ${num(op.qtd, 4)} ${op.papel.titulo} ` +
+          `${anoDe(op.papel.vencimento)} em ${data(op.dia)}, mas o saldo nessa data ` +
+          `era ${num(saldo, 4)}; a venda foi ignorada`);
+        continue;
+      }
+
+      let falta = op.qtd, custo = 0, curva = 0, puMercado = null;
+      for (const lote of fila) {
+        if (falta <= 1e-12) break;
+        const tira = Math.min(lote.restante, falta);
+        if (tira <= 0) continue;
+        lote.restante -= tira;
+        lote.saidas.push({ dia: op.dia, qtd: tira });
+        falta -= tira;
+        const s = lote.res.serie;
+        const k = Math.max(0, idxAte(s.data, op.dia));
+        custo += tira * (Number.isFinite(lote.puInf) ? lote.puInf : lote.res.pos.puCompra);
+        curva += tira * s.puCurva[k];
+        puMercado ??= s.puMercado[k];
+      }
+      const puVenda = Number.isFinite(op.pu) ? op.pu : puMercado;
+      vendas.push({
+        dia: op.dia, titulo: op.papel.titulo, vencimento: op.papel.vencimento,
+        qtd: op.qtd, puVenda, informado: Number.isFinite(op.pu),
+        recebido: puVenda * op.qtd, custo, curva,
+      });
+    }
+  }
+  vendas.sort((a, b) => a.dia - b.dia);
+  return { lotes, vendas };
+}
+
+/** Série da compra em reais: a unitária vezes o que estava em carteira no dia. */
+function dadosDoLote(lote) {
+  const { pos, serie } = lote.res;
+  const emCarteira = (d) => lote.original -
+    lote.saidas.reduce((s, x) => s + (x.dia <= d ? x.qtd : 0), 0);
+  const q = serie.data.map(emCarteira);
+  return {
+    titulo: pos.nome, vencimento: pos.vencimento, compra: pos.diaCompra,
+    serie: {
+      dias: serie.data,
+      curva: serie.curvaCaixa.map((v, k) => v * q[k]),
+      mercado: serie.mercadoCaixa.map((v, k) => v * q[k]),
+    },
+  };
+}
+
+function secaoSaldo(lotes) {
+  const porPapel = new Map();
+  for (const l of lotes) {
+    const { nome, vencimento } = l.res.pos;
+    const ch = `${nome}|${vencimento}`;
+    if (!porPapel.has(ch)) porPapel.set(ch, { nome, vencimento, comprado: 0, saldo: 0 });
+    const p = porPapel.get(ch);
+    p.comprado += l.original;
+    p.saldo += l.restante;
+  }
+  const papeis = [...porPapel.values()]
+    .sort((a, b) => a.nome.localeCompare(b.nome) || a.vencimento - b.vencimento);
+
+  return `<section class="secao">
+      <h2>Saldo por papel</h2>
+      <p class="nota" style="margin-top:-.4rem;margin-bottom:.8rem">Confira com o
+        extrato do Tesouro Direto ou da corretora. Se algum saldo estiver maior,
+        falta registrar uma venda na planilha.</p>
+      <div class="rolagemH"><table class="tabela"><thead><tr>
+        <th>Título</th><th>Vencimento</th><th>Comprado</th><th>Vendido</th><th>Saldo</th>
+      </tr></thead><tbody>${papeis.map((p) => `<tr${p.saldo <= 1e-9 ? ' class="zerado"' : ""}>
+        <td>${p.nome}</td><td>${data(p.vencimento)}</td>
+        <td>${num(p.comprado, 2)}</td><td>${num(p.comprado - p.saldo, 2)}</td>
+        <td><b>${num(p.saldo, 2)}</b></td></tr>`).join("")}</tbody></table></div>
+    </section>`;
+}
+
+function secaoVendas(vendas) {
+  if (!vendas.length) return "";
+  const soma = (c) => vendas.reduce((s, v) => s + v[c], 0);
+  const linhaV = (v) => `<tr>
+      <td>${data(v.dia)}</td><td>${v.titulo.replace("Tesouro ", "")} ${anoDe(v.vencimento)}</td>
+      <td>${num(v.qtd, 4)}</td>
+      <td>${brl(v.puVenda)}${v.informado ? "" : '<sup title="PU de venda publicado pelo Tesouro nesse dia">*</sup>'}</td>
+      <td>${brl(v.recebido)}</td><td>${brl(v.custo)}</td>
+      <td>${brl(v.recebido - v.custo)}</td><td>${brl(v.recebido - v.curva)}</td>
+    </tr>`;
+  return `<section class="secao">
+      <h2>Vendas realizadas</h2>
+      <div class="rolagemH"><table class="tabela"><thead><tr>
+        <th>Data</th><th>Título</th><th>Qtd.</th><th>PU de venda</th><th>Recebido</th>
+        <th>Custo (PEPS)</th><th>Resultado bruto</th><th>Ante a curva</th>
+      </tr></thead><tbody>${vendas.map(linhaV).join("")}
+        <tr class="total"><td>Total</td><td></td><td></td><td></td>
+          <td>${brl(soma("recebido"))}</td><td>${brl(soma("custo"))}</td>
+          <td>${brl(soma("recebido") - soma("custo"))}</td>
+          <td>${brl(soma("recebido") - soma("curva"))}</td></tr>
+      </tbody></table></div>
+      <div class="prosa" style="margin-top:.9rem">
+        <p>Cada venda sai primeiro das compras mais antigas do mesmo papel. O
+          custo é o preço dessas compras; o resultado bruto não inclui cupons
+          recebidos antes da venda nem imposto de renda.</p>
+        <p><b>Ante a curva</b> compara o que entrou com o que aquelas unidades
+          valiam na curva no dia: positivo é ágio capturado, negativo é deságio
+          aceito. Sem a coluna <b>pu</b>, vale o PU de venda publicado pelo
+          Tesouro naquele dia (marcado com *).</p>
+      </div>
+    </section>`;
+}
+
 // ------------------------------------------------------------ processamento
 
 /** Reprecifica a planilha e desenha o resultado; devolve se houve posição. */
@@ -231,77 +441,51 @@ async function processar(texto, palco) {
     return false;
   }
 
-  const faltando = ["data_compra", "titulo"]
-    .filter((c) => !(c in (entradas[0] || {})));
-  if (faltando.length) {
+  // A data vem como "data" ou, nas planilhas de antes das vendas, "data_compra".
+  const cab = entradas[0] || {};
+  const colData = ["data", "data_compra", "data_operacao"].find((c) => c in cab);
+  if (!colData || !("titulo" in cab)) {
     saida.innerHTML =
-      `<div class="aviso">A planilha precisa das colunas: ${faltando.join(", ")}.</div>`;
+      `<div class="aviso">A planilha precisa das colunas data e titulo.</div>`;
     return false;
   }
-  if (!("quantidade" in entradas[0]) && !("valor_aplicado" in entradas[0])) {
+  if (!("quantidade" in cab) && !("valor_aplicado" in cab)) {
     saida.innerHTML =
       `<div class="aviso">Informe uma coluna quantidade ou valor_aplicado.</div>`;
     return false;
   }
 
-  const linhas = [], problemas = [];
+  const problemas = [];
+  const { lotes, vendas } = await montarLotes(entradas, colData, problemas);
 
-  for (let i = 0; i < entradas.length; i++) {
-    const e = entradas[i];
-    const rot = `linha ${i + 2}`;
-
-    let diaCompra;
-    try {
-      diaCompra = diaDeTexto(e.data_compra);
-    } catch {
-      problemas.push(`${rot}: data de compra inválida (“${e.data_compra}”)`);
-      continue;
-    }
-
-    let venc = null;
-    if (e.vencimento) {
-      try { venc = diaDeTexto(e.vencimento); } catch { venc = null; }
-    }
-
-    const achado = D.resolverTitulo(lista, e.titulo, venc);
-    if (!achado.papel) { problemas.push(`${rot}: ${achado.erro}`); continue; }
-
-    const qtd = numeroBr(e.quantidade);
-    const val = numeroBr(e.valor_aplicado);
-    if (!Number.isFinite(qtd) && !Number.isFinite(val)) {
-      problemas.push(`${rot}: sem quantidade nem valor aplicado`);
-      continue;
-    }
-
-    let res;
-    try {
-      const dados = await D.papel(achado.papel.id);
-      res = simular(cal, dados, diaCompra,
-        Number.isFinite(qtd) ? { quantidade: qtd } : { valorAplicado: val });
-    } catch (err) {
-      problemas.push(`${rot}: ${err.message}`);
-      continue;
-    }
-
-    const { pos, serie } = res;
+  // Posição aberta: só o que sobrou de cada compra depois das vendas.
+  const linhas = lotes.filter((l) => l.restante > 1e-9).map((lote) => {
+    const { pos, serie } = lote.res;
     const n = serie.data.length - 1;
-    const puInf = numeroBr(e.pu_compra);
-    const aplicado = Number.isFinite(puInf) ? puInf * pos.quantidade : pos.aplicado;
-
-    linhas.push({
-      titulo: pos.nome, vencimento: pos.vencimento, compra: pos.diaCompra,
-      taxa: pos.taxa, quantidade: pos.quantidade, aplicado,
-      curva: serie.curvaCaixa[n], mercado: serie.mercadoCaixa[n],
-      agio: serie.agio[n], agioPct: serie.agioPct[n],
-      serie: { dias: serie.data, curva: serie.curvaCaixa, mercado: serie.mercadoCaixa },
+    const q = lote.restante;
+    const pu = Number.isFinite(lote.puInf) ? lote.puInf : pos.puCompra;
+    return {
+      ...dadosDoLote(lote),
+      taxa: pos.taxa, quantidade: q, original: lote.original, aplicado: pu * q,
+      curva: serie.curvaCaixa[n] * q, mercado: serie.mercadoCaixa[n] * q,
+      agio: serie.agio[n] * q, agioPct: serie.agioPct[n],
       vnaHoje: serie.vna[n],
-    });
-  }
+    };
+  });
+  // Histórico: todas as compras, inclusive as já vendidas, até a venda.
+  const todas = lotes.map(dadosDoLote);
 
-  if (!linhas.length) {
+  if (!lotes.length) {
     saida.innerHTML = avisos(problemas) +
       `<div class="aviso">Nenhuma linha pôde ser processada.</div>`;
     return false;
+  }
+  if (!linhas.length) {
+    saida.innerHTML = `${avisos(problemas)}
+      <div class="aviso">Nenhuma posição em aberto: tudo o que foi comprado já foi
+        vendido.</div>
+      ${secaoSaldo(lotes)}${secaoVendas(vendas)}`;
+    return true;
   }
 
   const somar = (c) => linhas.reduce((s, l) => s + l[c], 0);
@@ -327,6 +511,8 @@ async function processar(texto, palco) {
             ${pct((totMercado / totCurva - 1) * 100)}</span></div>
       </dl>
     </section>
+
+    ${secaoSaldo(lotes)}
 
     <section class="secao">
       <h2 id="tituloHist">Histórico: curva e mercado</h2>
@@ -394,7 +580,9 @@ async function processar(texto, palco) {
       <p style="margin-top:.9rem">
         <button class="botao fraco" id="btnCsv">Baixar resultado em CSV</button>
       </p>
-    </section>`;
+    </section>
+
+    ${secaoVendas(vendas)}`;
 
   saida.querySelector("#btnCsv").onclick = () => baixarCsv(linhas);
 
@@ -407,7 +595,8 @@ async function processar(texto, palco) {
   const mostrar = () => {
     botoes.forEach((b, k) => b.setAttribute("aria-pressed", String(k === periodo)));
     const usadas = filtro ? linhas.filter((l) => chaveDe(l) === filtro) : linhas;
-    desenharHistorico(saida, historico(usadas, PERIODOS[periodo][1]));
+    const doHist = filtro ? todas.filter((l) => chaveDe(l) === filtro) : todas;
+    desenharHistorico(saida, historico(doHist, PERIODOS[periodo][1]));
     desenharFluxo(saida, projetarFluxo(usadas, correcao()));
 
     for (const el of saida.querySelectorAll(".barras .linha")) {
@@ -419,8 +608,8 @@ async function processar(texto, palco) {
     const l = usadas[0];
     caixaFiltro.innerHTML = `<div class="salva">
         <span>Só <b>${l.titulo} ${anoDe(l.vencimento)}</b>
-          <span class="nota">· vence em ${data(l.vencimento)} · ${usadas.length}
-          ${usadas.length === 1 ? "compra" : "compras"}</span></span>
+          <span class="nota">· vence em ${data(l.vencimento)} · ${doHist.length}
+          ${doHist.length === 1 ? "compra" : "compras"}</span></span>
         <button class="botao fraco" id="btnTodas">Mostrar a carteira toda</button>
       </div>`;
     caixaFiltro.querySelector("#btnTodas").onclick = () => { filtro = null; mostrar(); };
@@ -621,6 +810,8 @@ function desenharHistorico(saida, h) {
 
 function avisos(problemas) {
   if (!problemas.length) return "";
+  const linhaDe = (p) => Number((p.match(/^linha (\d+)/) || [])[1]) || 0;
+  problemas = [...problemas].sort((a, b) => linhaDe(a) - linhaDe(b));
   const n = problemas.length;
   return `<section class="secao"><h2>${n} ${n === 1 ? "linha" : "linhas"}
     com problema</h2>${problemas.map((p) =>
@@ -669,7 +860,9 @@ function tabela(linhas) {
       <th>Ágio</th><th>Ágio %</th>
     </tr></thead><tbody>${linhas.map((l) => `<tr>
       <td>${l.titulo}</td><td>${data(l.vencimento)}</td><td>${data(l.compra)}</td>
-      <td>${num(l.taxa, 2)}</td><td>${num(l.quantidade, 4)}</td>
+      <td>${num(l.taxa, 2)}</td><td>${num(l.quantidade, 4)}${
+        l.original - l.quantidade > 1e-9
+          ? ` <span class="nota">de ${num(l.original, 4)}</span>` : ""}</td>
       <td>${brl(l.aplicado)}</td><td>${brl(l.curva)}</td><td>${brl(l.mercado)}</td>
       <td>${brl(l.agio)}</td><td>${pct(l.agioPct)}</td>
     </tr>`).join("")}</tbody></table>`;

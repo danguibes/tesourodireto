@@ -22,13 +22,17 @@ Git até o commit `83204b5`.
 
 ## Planilha da carteira
 
-Três colunas bastam: `data_compra`, `titulo` e `quantidade`. O nome do título
+Uma linha por operação: `data`, `operacao` (`compra` ou `venda`), `titulo` e
+`quantidade`. Cada venda abate primeiro das compras mais antigas do mesmo
+papel (PEPS), e a tela mostra o saldo por papel para conferir com o extrato,
+mais as vendas realizadas. Sem a coluna `operacao`, tudo é compra, e as
+planilhas antigas com `data_compra` continuam valendo. O nome do título
 pode vir como aparece na corretora ("Tesouro IPCA+ 2035", "Tesouro Educa+
 2028"); no RendA+ e no Educa+ o ano do nome é o de conversão, e o app converte
 para o vencimento real. Duas colunas opcionais cobrem casos específicos:
-`vencimento`, necessária quando o ano é ambíguo, e `pu_compra`, o preço que
-você realmente pagou. Em vez de `quantidade` é possível informar
-`valor_aplicado`. Aceita CSV separado por ponto e vírgula ou por vírgula.
+`vencimento`, necessária quando o ano é ambíguo, e `pu`, o preço que você
+realmente pagou ou recebeu. Numa compra, em vez de `quantidade` é possível
+informar `valor_aplicado`. Aceita CSV separado por ponto e vírgula ou por vírgula.
 
 ## Python
 
