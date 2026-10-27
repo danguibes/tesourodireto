@@ -326,7 +326,8 @@ async function processar(texto, palco) {
     </section>
 
     <section class="secao">
-      <h2>Histórico: curva e mercado</h2>
+      <h2 id="tituloHist">Histórico: curva e mercado</h2>
+      <div id="filtroHist"></div>
       <div class="periodos" id="periodos" role="group" aria-label="Período">
         ${PERIODOS.map(([rot], i) => `<button class="botao fraco" data-i="${i}"
           aria-pressed="${i === 0}">${rot}</button>`).join("")}
@@ -351,7 +352,8 @@ async function processar(texto, palco) {
       <p class="prosa" style="margin-top:.9rem">Cada barra é uma compra, não um
         título: o mesmo papel adquirido em datas diferentes trava taxas
         diferentes e por isso aparece mais de uma vez, podendo inclusive ficar
-        de lados opostos do zero.</p>
+        de lados opostos do zero. Clique numa barra para ver no histórico só
+        aquele papel, com todas as compras dele.</p>
     </section>
 
     <section class="secao">
@@ -364,15 +366,55 @@ async function processar(texto, palco) {
 
   saida.querySelector("#btnCsv").onclick = () => baixarCsv(linhas);
 
+  // O histórico pode ser filtrado por papel (título + vencimento) clicando
+  // numa barra do ágio por compra; clicar de novo, ou no botão, desfaz.
+  let periodo = 0, filtro = null;
   const botoes = [...saida.querySelectorAll("#periodos button")];
-  const mostrar = (i) => {
-    botoes.forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
-    desenharHistorico(saida, historico(linhas, PERIODOS[i][1]));
+  const caixaFiltro = saida.querySelector("#filtroHist");
+
+  const mostrar = () => {
+    botoes.forEach((b, k) => b.setAttribute("aria-pressed", String(k === periodo)));
+    const usadas = filtro ? linhas.filter((l) => chaveDe(l) === filtro) : linhas;
+    desenharHistorico(saida, historico(usadas, PERIODOS[periodo][1]));
+
+    for (const el of saida.querySelectorAll(".barras .linha")) {
+      const sel = el.dataset.chave === filtro;
+      el.setAttribute("aria-pressed", String(sel));
+      el.classList.toggle("apagada", filtro != null && !sel);
+    }
+    if (!filtro) { caixaFiltro.innerHTML = ""; return; }
+    const l = usadas[0];
+    caixaFiltro.innerHTML = `<div class="salva">
+        <span>Só <b>${l.titulo} ${anoDe(l.vencimento)}</b>
+          <span class="nota">· vence em ${data(l.vencimento)} · ${usadas.length}
+          ${usadas.length === 1 ? "compra" : "compras"}</span></span>
+        <button class="botao fraco" id="btnTodas">Mostrar a carteira toda</button>
+      </div>`;
+    caixaFiltro.querySelector("#btnTodas").onclick = () => { filtro = null; mostrar(); };
   };
-  botoes.forEach((b, i) => { b.onclick = () => mostrar(i); });
-  mostrar(0);
+
+  botoes.forEach((b, i) => { b.onclick = () => { periodo = i; mostrar(); }; });
+
+  const escolher = (linha) => {
+    if (!linha) return;
+    filtro = filtro === linha.dataset.chave ? null : linha.dataset.chave;
+    mostrar();
+    saida.querySelector("#tituloHist").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const listaBarras = saida.querySelector(".barras");
+  listaBarras.addEventListener("click", (e) => escolher(e.target.closest(".linha")));
+  listaBarras.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    escolher(e.target.closest(".linha"));
+  });
+
+  mostrar();
   return true;
 }
+
+const chaveDe = (l) => `${l.titulo}|${l.vencimento}`;
+const anoDe = (dia) => new Date(dia * 86400000).getUTCFullYear();
 
 // ---------------------------------------------------------------- histórico
 
@@ -441,23 +483,37 @@ function avisos(problemas) {
       `<div class="aviso">${p}</div>`).join("")}</section>`;
 }
 
+/**
+ * Barras de ágio por compra. O zero fica no meio só quando há barras dos dois
+ * lados; se todas forem negativas (ou todas positivas), ele vai para a borda
+ * e as barras usam a largura toda. Em qualquer caso a barra mais longa deixa
+ * espaço para o rótulo de %, que assim nunca invade o nome do título.
+ */
 function barras(linhas) {
   const maxAbs = Math.max(...linhas.map((l) => Math.abs(l.agioPct)), 0.5);
   const ordenadas = [...linhas].sort((a, b) => b.agioPct - a.agioPct);
+  const temPos = linhas.some((l) => l.agioPct > 0);
+  const temNeg = linhas.some((l) => l.agioPct < 0);
+  const zero = temPos && temNeg ? 50 : temNeg ? 100 : 0;
+  const ROTULO = "4.8rem";
 
-  return `<div class="barras">${ordenadas.map((l) => {
-    const larg = Math.abs(l.agioPct) / maxAbs * 50;
+  return `<div class="barras" style="--zero:${zero}%">${ordenadas.map((l) => {
+    const f = Math.abs(l.agioPct) / maxAbs;
     const pos = l.agioPct >= 0;
-    const rotulo = `${l.titulo.replace("Tesouro ", "")} ` +
-      `${new Date(l.vencimento * 86400000).getUTCFullYear()} · ${data(l.compra)}`;
-    return `<div class="linha">
+    const lado = pos ? 100 - zero : zero;
+    const larg = `calc((${lado}% - ${ROTULO}) * ${f.toFixed(4)})`;
+    const rotulo = `${l.titulo.replace("Tesouro ", "")} ${anoDe(l.vencimento)}` +
+      ` · ${data(l.compra)}`;
+    return `<div class="linha" role="button" tabindex="0" aria-pressed="false"
+        data-chave="${chaveDe(l)}">
       <span title="${rotulo}">${rotulo}</span>
       <span class="trilhoBarra">
-        <span class="barra${pos ? " pos" : ""}" style="${
-          pos ? `left:50%;width:${larg}%` : `right:50%;width:${larg}%`}"></span>
+        <span class="barra${pos ? " pos" : ""}" style="${pos
+          ? `left:${zero}%;width:${larg}`
+          : `right:${100 - zero}%;width:${larg}`}"></span>
         <span class="valor" style="${pos
-          ? `left:calc(50% + ${larg}% + 6px)`
-          : `right:calc(50% + ${larg}% + 6px)`}">${pct(l.agioPct)}</span>
+          ? `left:calc(${zero}% + ${larg} + 6px)`
+          : `right:calc(${100 - zero}% + ${larg} + 6px)`}">${pct(l.agioPct)}</span>
       </span></div>`;
   }).join("")}</div>`;
 }

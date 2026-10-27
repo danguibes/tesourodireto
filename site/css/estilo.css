@@ -430,11 +430,24 @@ details[open] > summary::before { content: "−"; }
 
 .barras .linha {
   display: grid;
-  grid-template-columns: minmax(150px, 270px) 1fr;
+  grid-template-columns: minmax(150px, 320px) 1fr;
   align-items: center;
   gap: 0.75rem;
   font-size: 0.86rem;
+  cursor: pointer;
+  border-radius: var(--raio);
+  padding: 0 0.3rem;
+  margin: 0 -0.3rem;
 }
+
+.barras .linha:hover { background: var(--superficie); }
+.barras .linha:focus-visible { outline: 2px solid var(--curva); outline-offset: 1px; }
+.barras .linha[aria-pressed="true"] {
+  background: var(--superficie);
+  box-shadow: inset 3px 0 0 var(--curva);
+  font-weight: 500;
+}
+.barras .linha.apagada { opacity: 0.4; }
 
 .barras .linha > span:first-child {
   overflow: hidden;
@@ -446,8 +459,8 @@ details[open] > summary::before { content: "−"; }
   position: relative;
   height: 20px;
   background: linear-gradient(to right,
-    transparent calc(50% - 0.5px), var(--regua) calc(50% - 0.5px),
-    var(--regua) calc(50% + 0.5px), transparent calc(50% + 0.5px));
+    transparent calc(var(--zero, 50%) - 0.5px), var(--regua) calc(var(--zero, 50%) - 0.5px),
+    var(--regua) calc(var(--zero, 50%) + 0.5px), transparent calc(var(--zero, 50%) + 0.5px));
 }
 
 .barras .barra {
