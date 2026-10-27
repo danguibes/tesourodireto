@@ -25,6 +25,22 @@ function reguaCor() {
     .getPropertyValue("--regua").trim();
 }
 
+/** Quanto o zoom da página aumentou o texto (1 = normal). */
+function escala() {
+  return parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
+}
+
+// O uPlot lê cores e fontes uma vez, ao nascer. Quando a pessoa troca o tema
+// ou o tamanho do texto (aparencia.js), os gráficos na tela são refeitos.
+const vivos = new Set();
+
+document.addEventListener("aparencia", () => {
+  for (const g of vivos) {
+    if (g.alvo.isConnected) g.refazer();
+    else g.destroy();
+  }
+});
+
 /**
  * @param {HTMLElement} alvo
  * @param {number[]} x segundos (epoch)
@@ -33,6 +49,24 @@ function reguaCor() {
 export function desenharLinhas(alvo, x, series, opcoes = {}) {
   alvo.innerHTML = "";
   if (!x.length) return null;
+
+  let u = criar(alvo, x, series, opcoes);
+  const g = {
+    alvo,
+    refazer() { u._obs.disconnect(); u.destroy(); u = criar(alvo, x, series, opcoes); },
+    destroy() { u._obs.disconnect(); u.destroy(); vivos.delete(g); },
+    // Quem chama ainda desliga o observador antes de destruir.
+    _obs: { disconnect() {} },
+  };
+  vivos.add(g);
+  return g;
+}
+
+function criar(alvo, x, series, opcoes) {
+  alvo.innerHTML = "";
+  const e = escala();
+  const fonte = `${Math.round(12 * e)}px Archivo, sans-serif`;
+  const altura = Math.round((opcoes.altura || 380) * e);
 
   const dica = document.createElement("div");
   dica.className = "dica esconde";
@@ -46,7 +80,7 @@ export function desenharLinhas(alvo, x, series, opcoes = {}) {
 
   const config = {
     width: alvo.clientWidth || 900,
-    height: opcoes.altura || 380,
+    height: altura,
     padding: [12, 8, 0, 0],
     cursor: {
       y: false,
@@ -59,7 +93,10 @@ export function desenharLinhas(alvo, x, series, opcoes = {}) {
       {
         stroke: eixoCor(), grid: { show: false },
         ticks: { stroke: reguaCor(), size: 4 },
-        font: "12px Archivo, sans-serif",
+        font: fonte,
+        // Distâncias mínimas entre rótulos crescem com o texto, senão encavalam.
+        space: Math.round(50 * e),
+        size: Math.round(50 * e),
         // O uPlot rotula datas em inglês por padrão.
         values: (u, divisoes) => {
           const anos = (u.scales.x.max - u.scales.x.min) / (365.25 * 86400);
@@ -76,8 +113,9 @@ export function desenharLinhas(alvo, x, series, opcoes = {}) {
         stroke: eixoCor(),
         grid: { stroke: reguaCor(), width: 1 },
         ticks: { show: false },
-        font: "12px Archivo, sans-serif",
-        size: 68,
+        font: fonte,
+        space: Math.round(30 * e),
+        size: Math.round(68 * e),
         values: (u, vs) => vs.map((v) => (unidade === "pct"
           ? `${num(v, 0)}%`
           : v.toLocaleString("pt-BR", { maximumFractionDigits: 0 }))),
@@ -117,7 +155,7 @@ export function desenharLinhas(alvo, x, series, opcoes = {}) {
   const u = new uPlot(config, dados, alvo);
 
   const redimensionar = () => u.setSize({
-    width: alvo.clientWidth, height: opcoes.altura || 380,
+    width: alvo.clientWidth, height: altura,
   });
   const obs = new ResizeObserver(redimensionar);
   obs.observe(alvo);

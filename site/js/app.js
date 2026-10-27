@@ -2,6 +2,9 @@
 
 import * as simulacao from "./simulacao.js";
 import * as carteira from "./carteira.js";
+import { montarAparencia } from "./aparencia.js";
+
+montarAparencia(document.getElementById("aparencia"));
 
 const telas = { simulacao, carteira };
 

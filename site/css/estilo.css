@@ -16,15 +16,17 @@
   --igpm: #6b4b7a;
   --positivo: #2f6b3f;
 
-  --trilho: 310px;
+  --trilho: min(calc(310px * var(--escala, 1)), 40vw);
   --raio: 3px;
 
   --passo: 1.5rem;
   --prosa: 68ch;
 }
 
+/* Escuro: segue o sistema, a menos que a pessoa tenha escolhido no botão
+   (data-tema, gravado por js/aparencia.js). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema="claro"]) {
     --papel: #10161c;
     --superficie: #171f27;
     --superficie-2: #1f2932;
@@ -42,16 +44,38 @@
   }
 }
 
+:root[data-tema="escuro"] {
+  --papel: #10161c;
+  --superficie: #171f27;
+  --superficie-2: #1f2932;
+  --tinta: #e6ecf1;
+  --tinta-fraca: #94a3b1;
+  --regua: #2b3741;
+
+  --curva: #4bb3cc;
+  --mercado: #e0674f;
+  --reinvest: #8d9aa6;
+  --ipca: #d6a44c;
+  --selic: #8fa3b5;
+  --igpm: #a98ac0;
+  --positivo: #5fb073;
+}
+
+:root[data-tema="claro"] { color-scheme: light; }
+:root[data-tema="escuro"] { color-scheme: dark; }
+
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* --escala vem dos botões A− / A+ (js/aparencia.js). Quase tudo é medido em
+   rem, então mudar a fonte da raiz aumenta texto, botões e espaçamentos. */
+html { -webkit-text-size-adjust: 100%; font-size: calc(100% * var(--escala, 1)); }
 
 body {
   margin: 0;
   background: var(--papel);
   color: var(--tinta);
   font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.55;
   font-variant-numeric: tabular-nums;
 }
@@ -96,7 +120,7 @@ button, select, input {
 
 .palco {
   padding: 2.25rem clamp(1.25rem, 3vw, 3rem) 5rem;
-  max-width: 1180px;
+  max-width: calc(1180px * var(--escala, 1));
   min-width: 0;
 }
 
@@ -107,6 +131,23 @@ button, select, input {
 }
 
 /* ------------------------------------------------------------------ trilho */
+
+.aparencia { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: -0.5rem; }
+
+.aparencia button {
+  min-width: 2.6rem;
+  min-height: 2.3rem;
+  padding: 0.2rem 0.6rem;
+  background: none;
+  border: 1px solid var(--regua);
+  border-radius: var(--raio);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.aparencia button:hover:not(:disabled) { border-color: var(--curva); color: var(--curva); }
+.aparencia button:disabled { opacity: 0.4; cursor: default; }
+.aparencia .tema { margin-left: auto; }
 
 .marca {
   font-family: Spectral, Georgia, serif;
@@ -381,7 +422,8 @@ details[open] > summary::before { content: "−"; }
   font-weight: 500;
 }
 
-@media (prefers-color-scheme: dark) { .botao { color: #0d1419; } }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .botao { color: #0d1419; } }
+:root[data-tema="escuro"] .botao { color: #0d1419; }
 
 .botao.fraco {
   background: none;
@@ -457,7 +499,7 @@ details[open] > summary::before { content: "−"; }
 
 .barras .trilhoBarra {
   position: relative;
-  height: 20px;
+  height: 1.25rem;
   background: linear-gradient(to right,
     transparent calc(var(--zero, 50%) - 0.5px), var(--regua) calc(var(--zero, 50%) - 0.5px),
     var(--regua) calc(var(--zero, 50%) + 0.5px), transparent calc(var(--zero, 50%) + 0.5px));
@@ -476,7 +518,7 @@ details[open] > summary::before { content: "−"; }
   top: 0;
   font-size: 0.78rem;
   color: var(--tinta-fraca);
-  line-height: 20px;
+  line-height: 1.25rem;
 }
 
 .carregando { color: var(--tinta-fraca); padding: 2rem 0; }

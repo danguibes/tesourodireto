@@ -17,6 +17,10 @@ Duas telas:
   mercado e ágio em 30 dias, 90 dias, 1 ano ou desde a primeira compra). A
   última planilha fica lembrada no navegador, que não a envia a lugar nenhum.
 
+No alto da barra lateral, A− e A+ mudam o tamanho do texto (de 90% a 200%,
+gráficos inclusive) e o outro botão alterna entre tema claro e escuro. As duas
+escolhas ficam guardadas no navegador; sem escolha, o tema segue o do sistema.
+
 A versão anterior, em Streamlit, saiu em 26/10/2026; ela está no histórico do
 Git até o commit `83204b5`.
 

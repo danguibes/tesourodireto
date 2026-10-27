@@ -7,6 +7,16 @@
 <meta name="description" content="Simule a compra de um título público numa data passada e compare o valor teórico contratado com a marcação a mercado.">
 <meta name="color-scheme" content="light dark">
 
+<script>
+  // Tamanho do texto e tema escolhidos neste navegador (js/aparencia.js),
+  // aplicados antes do CSS para a página não piscar.
+  try {
+    const a = JSON.parse(localStorage.getItem("tesourodireto.aparencia.v1")) || {};
+    if (a.tema) document.documentElement.dataset.tema = a.tema;
+    if (a.escala) document.documentElement.style.setProperty("--escala", a.escala);
+  } catch (e) { /* segue o padrão */ }
+</script>
+
 <link rel="stylesheet" href="vendor/fontes.css">
 <link rel="stylesheet" href="vendor/uPlot.min.css">
 <link rel="stylesheet" href="css/estilo.css">
@@ -18,6 +28,8 @@
 <div class="quadro">
   <aside class="trilho">
     <h1 class="marca">Curva e mercado<span>Títulos públicos do Tesouro Direto</span></h1>
+
+    <div class="aparencia" id="aparencia" role="group" aria-label="Tamanho do texto e tema"></div>
 
     <nav class="abas" id="abas" role="tablist">
       <button data-tela="simulacao" role="tab" aria-selected="true">Simulação</button>
