@@ -486,3 +486,31 @@ details[open] > summary::before { content: "−"; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Fluxo de caixa futuro: colunas empilhadas por ano, em HTML. */
+.controle { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem;
+  font-size: 0.88rem; margin-bottom: 1rem; }
+.controle input { width: 5rem; padding: 0.25rem 0.4rem; border: 1px solid var(--regua);
+  border-radius: var(--raio); background: var(--superficie); color: var(--tinta); font: inherit; }
+
+.colunas {
+  position: relative;
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 240px;
+  padding-top: 1.3rem;
+  margin-bottom: 1.6rem;
+  border-bottom: 1px solid var(--regua);
+}
+.colunas .topo { position: absolute; top: 0; left: 0; font-size: 0.75rem; color: var(--tinta-fraca); }
+.coluna {
+  position: relative;
+  flex: 1 1 0; min-width: 2px; height: 100%;
+  display: flex; flex-direction: column-reverse;
+}
+.coluna span { display: block; width: 100%; }
+.coluna:hover span { opacity: 0.75; }
+.coluna em {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  margin-top: 4px; font-style: normal; font-size: 0.72rem; color: var(--tinta-fraca);
+  white-space: nowrap;
+}
