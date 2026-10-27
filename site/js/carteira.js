@@ -474,6 +474,9 @@ async function processar(texto, palco) {
   });
   // Histórico: todas as compras, inclusive as já vendidas, até a venda.
   const todas = lotes.map(dadosDoLote);
+  // Só pede projeção dos índices que existem na posição aberta.
+  const indicesNaCarteira = INDICES.filter((x) =>
+    linhas.some((l) => INDEXADOR[classificar(l.titulo)] === x.chave));
 
   if (!lotes.length) {
     saida.innerHTML = avisos(problemas) +
@@ -537,12 +540,13 @@ async function processar(texto, palco) {
 
     <section class="secao">
       <h2>Fluxo de caixa futuro</h2>
-      <p class="controle">
-        <label for="inpCorrecao">Correção anual projetada dos indexados</label>
-        <input type="number" id="inpCorrecao" value="0" step="0.5" min="-5" max="30"
-          inputmode="decimal"> % a.a.
-        <span class="nota">0 = valores de hoje</span>
-      </p>
+      ${indicesNaCarteira.length ? `<div class="controle">
+        ${indicesNaCarteira.map((x) => `<label>${x.rotulo}
+          <input type="number" data-indice="${x.chave}" value="0" step="0.25"
+            min="-5" max="30" inputmode="decimal"> % a.a.</label>`).join("")}
+        <span class="nota">média por ano até cada pagamento; 0 mostra em valores
+          de hoje</span>
+      </div>` : ""}
       <dl class="cifras" id="cifrasFluxo"></dl>
       <div class="legenda" id="legFluxo"></div>
       <div id="colunasFluxo"></div>
@@ -557,10 +561,18 @@ async function processar(texto, palco) {
           caminho. RendA+ e Educa+ devolvem o principal em parcelas mensais
           iguais (240 e 60), que já vêm corrigidas pelo IPCA.</p>
         <p>O valor futuro dos títulos atrelados a IPCA, IGP-M e Selic depende
-          do índice até lá, que ninguém sabe. Com correção zero, eles aparecem
-          pelo valor de hoje (o VNA mais recente); com uma correção, o VNA cresce
-          a essa taxa até cada pagamento. Os prefixados não mudam: o valor deles
-          já é fixo em reais. Valores brutos, sem imposto de renda.</p>
+          do índice até lá, que ninguém sabe — esses são os campos acima. Em cada
+          um vai a média anual que você espera daquele índice até os
+          vencimentos (para o IPCA, algo como a meta de inflação; para a Selic,
+          a taxa média esperada). Com 0, os títulos aparecem pelo valor de hoje.
+          Os prefixados não mudam: o valor deles já é fixo em reais.</p>
+        <p>O imposto de renda segue a tabela regressiva — 22,5% até 180 dias da
+          compra, 20% até 360, 17,5% até 720 e 15% depois —, contada da compra
+          até cada pagamento. Cupom é tributado inteiro; o principal, sobre o que
+          passar do preço de compra; cada parcela do RendA+ e do Educa+, sobre o
+          que passar da fatia do custo que cabe a ela. É uma estimativa: o
+          Tesouro desconta do primeiro cupom os juros pagos na compra, e a taxa
+          de custódia da B3 não está na conta.</p>
       </div>
     </section>
 
@@ -597,7 +609,7 @@ async function processar(texto, palco) {
     const usadas = filtro ? linhas.filter((l) => chaveDe(l) === filtro) : linhas;
     const doHist = filtro ? todas.filter((l) => chaveDe(l) === filtro) : todas;
     desenharHistorico(saida, historico(doHist, PERIODOS[periodo][1]));
-    desenharFluxo(saida, projetarFluxo(usadas, correcao()));
+    desenharFluxo(saida, projetarFluxo(usadas, taxas()));
 
     for (const el of saida.querySelectorAll(".barras .linha")) {
       const sel = el.dataset.chave === filtro;
@@ -617,15 +629,17 @@ async function processar(texto, palco) {
 
   botoes.forEach((b, i) => { b.onclick = () => { periodo = i; mostrar(); }; });
 
-  const inpCorrecao = saida.querySelector("#inpCorrecao");
-  const correcao = () => {
-    const v = Number(String(inpCorrecao.value).replace(",", "."));
-    return Number.isFinite(v) ? v : 0;
-  };
-  inpCorrecao.addEventListener("input", () => {
-    const usadas = filtro ? linhas.filter((l) => chaveDe(l) === filtro) : linhas;
-    desenharFluxo(saida, projetarFluxo(usadas, correcao()));
-  });
+  const camposIndice = [...saida.querySelectorAll("input[data-indice]")];
+  const taxas = () => Object.fromEntries(camposIndice.map((c) => {
+    const v = Number(String(c.value).replace(",", "."));
+    return [c.dataset.indice, Number.isFinite(v) ? v : 0];
+  }));
+  for (const c of camposIndice) {
+    c.addEventListener("input", () => {
+      const usadas = filtro ? linhas.filter((l) => chaveDe(l) === filtro) : linhas;
+      desenharFluxo(saida, projetarFluxo(usadas, taxas()));
+    });
+  }
 
   const escolher = (linha) => {
     if (!linha) return;
@@ -649,53 +663,95 @@ const chaveDe = (l) => `${l.titulo}|${l.vencimento}`;
 
 // ------------------------------------------------------------ fluxo futuro
 
+// As três primeiras partes são líquidas de IR; o IR vai empilhado por cima,
+// então a coluna inteira é o valor bruto.
 const PARTES = [
   { chave: "principal", rotulo: "Principal no vencimento", cor: "curva" },
   { chave: "cupons", rotulo: "Cupons semestrais", cor: "ipca" },
   { chave: "renda", rotulo: "Parcelas mensais (RendA+ e Educa+)", cor: "igpm" },
+  { chave: "ir", rotulo: "Imposto de renda (estimado)", cor: "reinvest" },
 ];
 
+// Índices que corrigem cada indexador, para os campos de projeção.
+const INDICES = [
+  { chave: "ipca", rotulo: "IPCA esperado" },
+  { chave: "selic", rotulo: "Selic esperada" },
+  { chave: "igpm", rotulo: "IGP-M esperado" },
+];
+
+/** Tabela regressiva da renda fixa, por dias corridos desde a compra. */
+function aliquotaIR(dias) {
+  if (dias <= 180) return 0.225;
+  if (dias <= 360) return 0.20;
+  if (dias <= 720) return 0.175;
+  return 0.15;
+}
+
 /**
- * Pagamentos futuros da carteira, por ano.
+ * Pagamentos futuros da carteira, por ano, brutos e líquidos de IR.
  *
  * Usa os mesmos fluxos contratuais da precificação (fração do VNA em cada
- * data) vezes a quantidade e o VNA. O VNA de hoje é o último conhecido; para
- * os indexados ele cresce à correção informada, e nos prefixados fica fixo.
- * O pagamento final dos títulos com cupom é separado em cupom e principal.
+ * data) vezes a quantidade e o VNA. O VNA de hoje é o último conhecido; nos
+ * indexados ele cresce à taxa projetada do índice de cada um, e nos
+ * prefixados fica fixo.
+ *
+ * IR: alíquota pela tabela regressiva, com o prazo da compra até cada
+ * pagamento. Cupom é tributado inteiro. Principal no vencimento é tributado
+ * sobre o que passou do custo da compra. Cada parcela do RendA+ e do Educa+
+ * leva uma fatia do custo proporcional a ela. Ganho negativo não gera IR nem
+ * crédito.
  */
-function projetarFluxo(linhas, correcaoAa) {
+function projetarFluxo(linhas, taxas) {
   const hoje = info.ultimaDataBase;
   const porAno = new Map();
-  const tot = { principal: 0, cupons: 0, renda: 0, total: 0, prox12: 0, ultimo: null };
+  const zero = () => ({ principal: 0, cupons: 0, renda: 0, ir: 0, bruto: 0 });
+  const tot = { ...zero(), liquido: 0, prox12: 0, ultimo: null };
 
   for (const l of linhas) {
     const fam = classificar(l.titulo);
-    const indexado = INDEXADOR[fam] !== "prefixado";
+    const indice = INDEXADOR[fam];
+    const taxa = indice === "prefixado" ? 0 : (taxas[indice] || 0);
     const fl = fluxos(cal, l.titulo, l.vencimento);
     const semCupom = fam === LTN || fam === LFT || fam === NTNB_P;
+    const custo = l.aplicado;
+    // RendA+/Educa+: o custo se divide entre as parcelas posteriores à compra.
+    const somaParcelas = fl.reduce((s, [d, v]) => s + (d > l.compra ? v : 0), 0);
 
     fl.forEach(([dia, v], i) => {
       if (dia <= hoje) return;
       const anos = (dia - hoje) / 365.25;
-      const vna = l.vnaHoje * (indexado ? Math.pow(1 + correcaoAa / 100, anos) : 1);
-      const fator = vna * l.quantidade;
+      const fator = l.vnaHoje * Math.pow(1 + taxa / 100, anos) * l.quantidade;
+      const aliq = aliquotaIR(dia - l.compra);
 
-      const partes = { principal: 0, cupons: 0, renda: 0 };
-      if (fam === NTNB1) partes.renda = v * fator;
-      else if (semCupom) partes.principal = v * fator;
-      else {
+      const p = zero();
+      let ir = 0;
+      if (fam === NTNB1) {
+        p.renda = v * fator;
+        ir = aliq * Math.max(0, p.renda - custo * v / somaParcelas);
+      } else if (semCupom) {
+        p.principal = v * fator;
+        ir = aliq * Math.max(0, p.principal - custo);
+      } else {
         const ultimo = i === fl.length - 1;
-        partes.principal = (ultimo ? 1 : 0) * fator;
-        partes.cupons = (v - (ultimo ? 1 : 0)) * fator;
+        p.principal = (ultimo ? 1 : 0) * fator;
+        p.cupons = (v - (ultimo ? 1 : 0)) * fator;
+        const irCupom = aliq * p.cupons;
+        const irPrincipal = ultimo ? aliq * Math.max(0, p.principal - custo) : 0;
+        ir = irCupom + irPrincipal;
+        p.cupons -= irCupom;
+        p.principal -= irPrincipal;
       }
+      if (fam === NTNB1) p.renda -= ir;
+      else if (semCupom) p.principal -= ir;
+      p.ir = ir;
+      p.bruto = p.principal + p.cupons + p.renda + ir;
 
       const ano = new Date(dia * 86400000).getUTCFullYear();
-      if (!porAno.has(ano)) porAno.set(ano, { principal: 0, cupons: 0, renda: 0 });
+      if (!porAno.has(ano)) porAno.set(ano, zero());
       const acc = porAno.get(ano);
-      for (const k of Object.keys(partes)) { acc[k] += partes[k]; tot[k] += partes[k]; }
-      const soma = partes.principal + partes.cupons + partes.renda;
-      tot.total += soma;
-      if (dia - hoje <= 365) tot.prox12 += soma;
+      for (const k of Object.keys(p)) { acc[k] += p[k]; tot[k] += p[k]; }
+      tot.liquido += p.bruto - ir;
+      if (dia - hoje <= 365) tot.prox12 += p.bruto - ir;
       if (tot.ultimo == null || dia > tot.ultimo) tot.ultimo = dia;
     });
   }
@@ -704,10 +760,9 @@ function projetarFluxo(linhas, correcaoAa) {
   const anos = [...porAno.keys()].sort((a, b) => a - b);
   const linhasAno = [];
   for (let a = anos[0]; anos.length && a <= anos[anos.length - 1]; a++) {
-    const v = porAno.get(a) || { principal: 0, cupons: 0, renda: 0 };
-    linhasAno.push({ ano: a, ...v, total: v.principal + v.cupons + v.renda });
+    linhasAno.push({ ano: a, ...(porAno.get(a) || zero()) });
   }
-  return { anos: linhasAno, tot, correcaoAa };
+  return { anos: linhasAno, tot };
 }
 
 function desenharFluxo(saida, f) {
@@ -723,29 +778,34 @@ function desenharFluxo(saida, f) {
   }
 
   cifras.innerHTML = `
-    <div><dt>A receber até o fim</dt><dd>${brl(tot.total)}</dd></div>
-    <div><dt>Nos próximos 12 meses</dt><dd>${brl(tot.prox12)}</dd></div>
+    <div><dt>A receber, líquido</dt><dd>${brl(tot.liquido)}</dd></div>
+    <div><dt>IR estimado</dt><dd>${brl(tot.ir)}</dd>
+      <span class="delta">${num(tot.bruto ? tot.ir / tot.bruto * 100 : 0, 1)}% do bruto</span></div>
+    <div><dt>Líquido nos próximos 12 meses</dt><dd>${brl(tot.prox12)}</dd></div>
     <div><dt>Último pagamento</dt><dd>${data(tot.ultimo)}</dd></div>`;
 
   const usadas = PARTES.filter((p) => tot[p.chave] > 0);
   desenharLegenda(saida.querySelector("#legFluxo"), usadas);
 
-  const max = Math.max(...anos.map((a) => a.total));
+  const max = Math.max(...anos.map((a) => a.bruto));
   const passo = Math.ceil(anos.length / 12);
   colunas.innerHTML = `<div class="colunas">
-      <span class="topo">${brl(max)}</span>
-      ${anos.map((a, i) => `<div class="coluna" title="${a.ano}: ${brl(a.total)}${
+      <span class="topo">${brl(max)} bruto</span>
+      ${anos.map((a, i) => `<div class="coluna" title="${a.ano}: ${brl(a.bruto - a.ir)} líquido, ${brl(a.bruto)} bruto${
         usadas.map((p) => `\n${p.rotulo}: ${brl(a[p.chave])}`).join("")}">
         ${usadas.map((p) => `<span style="height:${(a[p.chave] / max * 100).toFixed(2)}%;background:var(--${p.cor})"></span>`).join("")}
         <em>${i % passo === 0 ? a.ano : ""}</em>
       </div>`).join("")}
     </div>`;
 
+  const liquidas = usadas.filter((p) => p.chave !== "ir");
   saida.querySelector("#tabFluxo").innerHTML = `<table class="tabela"><thead><tr>
-      <th>Ano</th>${usadas.map((p) => `<th>${p.rotulo}</th>`).join("")}<th>Total</th>
-    </tr></thead><tbody>${anos.filter((a) => a.total > 0).map((a) => `<tr>
-      <td>${a.ano}</td>${usadas.map((p) => `<td>${brl(a[p.chave])}</td>`).join("")}
-      <td>${brl(a.total)}</td></tr>`).join("")}</tbody></table>`;
+      <th>Ano</th>${liquidas.map((p) => `<th>${p.rotulo}, líquido</th>`).join("")}
+      <th>IR</th><th>Líquido</th><th>Bruto</th>
+    </tr></thead><tbody>${anos.filter((a) => a.bruto > 0).map((a) => `<tr>
+      <td>${a.ano}</td>${liquidas.map((p) => `<td>${brl(a[p.chave])}</td>`).join("")}
+      <td>${brl(a.ir)}</td><td><b>${brl(a.bruto - a.ir)}</b></td><td>${brl(a.bruto)}</td>
+    </tr>`).join("")}</tbody></table>`;
 }
 const anoDe = (dia) => new Date(dia * 86400000).getUTCFullYear();
 
