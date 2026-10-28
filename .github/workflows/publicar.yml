@@ -6,8 +6,13 @@ name: Publicar site
 #
 # O CSV não vem do portal: desde outubro de 2026 ele devolve um desafio em
 # JavaScript a qualquer script. Ele é baixado no navegador e sobe como anexo
-# do release `fonte` por scripts/publicar_dados.ps1, que também dispara este
+# do release `fonte` — pelo scripts/publicar_dados.ps1 no notebook ou por um
+# atalho no celular (LEIA-ME-PAGES.md) —, e quem envia também dispara este
 # workflow. Por isso não há agendamento: sem CSV novo, não há o que publicar.
+#
+# O celular não consegue substituir um anexo de mesmo nome, então cada envio
+# dele tem nome próprio. Vale o anexo mais novo; os anteriores são apagados
+# depois que a publicação dá certo.
 
 on:
   push:
@@ -15,7 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # apagar os anexos antigos do release fonte
   pages: write
   id-token: write
 
@@ -41,13 +46,35 @@ jobs:
       - name: Instalar dependências
         run: pip install --quiet pandas requests bizdays python-dateutil numpy
 
-      - name: Baixar o CSV do release fonte
+      - name: Baixar o CSV mais novo do release fonte
+        id: fonte
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download fonte --repo "$GITHUB_REPOSITORY" \
-            --pattern precotaxatesourodireto.csv --dir entrada
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/fonte" --jq '
+            [.assets[] | select(.name | test("^precotaxatesourodireto.*[.]csv$"))]
+            | sort_by(.created_at) | last | "\(.id) \(.created_at) \(.name)"' > escolhido.txt
+          read -r id criado nome < escolhido.txt
+          if [ -z "$id" ] || [ "$id" = "null" ]; then echo "Nenhum CSV no release fonte"; exit 1; fi
+          echo "Usando $nome, enviado em $criado"
+          mkdir -p entrada
+          gh api -H "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$id" > entrada/precotaxatesourodireto.csv
           ls -l entrada
+          echo "criado=$criado" >> "$GITHUB_OUTPUT"
+
+      # Do celular pode subir qualquer arquivo — inclusive a página de desafio
+      # do portal, se o download falhou. Melhor parar aqui que publicar lixo.
+      - name: Conferir o CSV
+        run: |
+          set -euo pipefail
+          esperado="Tipo Titulo;Data Vencimento;Data Base;Taxa Compra Manha;Taxa Venda Manha;PU Compra Manha;PU Venda Manha;PU Base Manha"
+          primeira=$(head -n 1 entrada/precotaxatesourodireto.csv | sed 's/^\xEF\xBB\xBF//' | tr -d '\r')
+          if [ "$primeira" != "$esperado" ]; then echo "Cabeçalho inesperado: $primeira"; exit 1; fi
+          tamanho=$(stat -c %s entrada/precotaxatesourodireto.csv)
+          if [ "$tamanho" -lt 5242880 ]; then echo "Arquivo pequeno demais: $tamanho bytes"; exit 1; fi
+          echo "Cabeçalho confere; $tamanho bytes."
 
       - name: Gerar os dados do site
         run: python scripts/gerar_dados_site.py site --arquivo entrada/precotaxatesourodireto.csv
@@ -70,6 +97,19 @@ jobs:
 
       - id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Apagar os anexos anteriores ao publicado
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CRIADO: ${{ steps.fonte.outputs.criado }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/fonte" --jq '
+            .assets[] | select(.created_at < env.CRIADO) | "\(.id) \(.name)"' |
+          while read -r id nome; do
+            echo "Apagando $nome"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+          done
 
       - name: Resumo
         run: |
