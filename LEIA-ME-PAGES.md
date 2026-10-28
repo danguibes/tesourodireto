@@ -19,7 +19,8 @@ preços do dia do tesourodireto.com.br responde 410 Gone.
 
 Então o download é de uma pessoa, e o resto é automático:
 
-1. Abra no navegador o link que está no topo de `scripts/publicar_dados.ps1`.
+1. Abra no navegador o link que está no topo de `scripts/publicar_dados.ps1`
+   (ou use o celular: ver "Atualizar pelo celular", abaixo).
    O arquivo cai em Downloads.
 2. Rode o script. Ele pega o `precotaxatesourodireto*.csv` mais novo, confere
    o cabeçalho, substitui o anexo do release `fonte` e dispara o workflow:
@@ -122,6 +123,81 @@ powershell -ExecutionPolicy Bypass -File scripts\atualizar_ao_logar.ps1 -Forcar
 A tarefa foi criada em 26/10/2026 nesta máquina e não está no repositório:
 num computador novo, ela precisa ser registrada de novo (gatilhos de logon e
 de desbloqueio, atraso de 5 minutos, liberada na bateria).
+
+## Atualizar pelo celular (Android)
+
+O download continua sendo do navegador, agora o do celular. Para enviar,
+usa-se o app **HTTP Shortcuts** (Play Store ou F-Droid), que aparece no menu
+Compartilhar. No dia a dia:
+
+1. Toque no ícone **Baixar Tesouro** da tela inicial. O Chrome baixa o CSV,
+   que tem uns 14 MB.
+2. Na notificação de download concluído, ou em Arquivos → Downloads,
+   compartilhe o arquivo com **HTTP Shortcuts → Publicar Tesouro**.
+3. Pronto. O atalho envia o CSV ao release `fonte` e dispara o workflow, e o
+   site atualiza em uns 2 minutos.
+
+O nome de cada envio é único (`precotaxatesourodireto-<instante>.csv`),
+porque a API do GitHub recusa um anexo de nome repetido. O workflow usa o
+anexo mais novo, confere o cabeçalho e o tamanho, e só depois de publicar
+apaga os anteriores. Se o arquivo enviado não for o CSV, por exemplo a página
+de desafio do portal, o workflow falha e o site continua como estava.
+
+### Montagem, uma vez
+
+**Token.** Em <https://github.com/settings/personal-access-tokens/new>, crie
+um token *fine-grained*:
+
+- Repository access: *Only select repositories* → `danguibes/tesourodireto`.
+- Permissions: **Contents** = Read and write e **Actions** = Read and write.
+- Expiração: a que preferir. Quando vencer, os atalhos passam a responder 401
+  e basta trocar o valor da variável.
+
+O token fica só dentro do HTTP Shortcuts, no celular. Se perder o aparelho,
+revogue o token na mesma página.
+
+**No HTTP Shortcuts:**
+
+1. *Variáveis* (menu ⋮ → Variables):
+   - `token`, do tipo *Constant*: o token acima.
+   - `nome`, do tipo *Constant*: valor qualquer, porque o script o sobrescreve.
+2. Atalho **Disparar publicação**, do tipo *Regular HTTP Shortcut*:
+   - Method `POST`.
+   - URL `https://api.github.com/repos/danguibes/tesourodireto/actions/workflows/publicar.yml/dispatches`
+   - Headers: `Authorization: Bearer {token}` e
+     `Accept: application/vnd.github+json`. O `{token}` é a variável, inserida
+     pelo botão de variáveis do campo.
+   - Request Body: *Custom text*, tipo `application/json`, conteúdo
+     `{"ref":"main"}`.
+
+   Sozinho, ele republica o site com o último CSV enviado. A resposta certa
+   é **204**, sem corpo.
+3. Atalho **Publicar Tesouro**, do tipo *Regular HTTP Shortcut*:
+   - Method `POST`.
+   - URL `https://uploads.github.com/repos/danguibes/tesourodireto/releases/424704737/assets?name={nome}`
+     (`424704737` é o id do release `fonte`).
+   - Headers: `Authorization: Bearer {token}` e `Content-Type: text/csv`.
+   - Request Body: *File*, o arquivo recebido pelo Compartilhar.
+   - Em *Trigger & Execution Settings*, ligue a opção de aparecer no menu
+     Compartilhar para arquivos.
+   - Em *Scripting*:
+     - *Run before execution*:
+       ```js
+       setVariable("nome", "precotaxatesourodireto-" + Date.now() + ".csv");
+       ```
+     - *Run on success*:
+       ```js
+       enqueueShortcut("Disparar publicação");
+       ```
+
+   A resposta certa do envio é **201**.
+4. Atalho **Baixar Tesouro**, do tipo *Browser Shortcut*, com o link que está
+   no topo de `scripts/publicar_dados.ps1`. Ponha-o na tela inicial.
+
+As duas chamadas foram conferidas em 28/10/2026, do notebook, com a mesma URL,
+os mesmos cabeçalhos e o mesmo corpo: o envio deu 201, o disparo deu 204, e o
+workflow publicou o anexo novo e apagou o antigo. Os nomes dos menus do HTTP
+Shortcuts são os da versão em inglês e podem variar um pouco entre versões.
 
 ## Endereço
 
