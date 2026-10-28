@@ -156,48 +156,38 @@ um token *fine-grained*:
 O token fica só dentro do HTTP Shortcuts, no celular. Se perder o aparelho,
 revogue o token na mesma página.
 
-**No HTTP Shortcuts:**
+**No HTTP Shortcuts**, os atalhos vêm prontos em
+[`celular/http-shortcuts.json`](celular/http-shortcuts.json):
 
-1. *Variáveis* (menu ⋮ → Variables):
-   - `token`, do tipo *Constant*: o token acima.
-   - `nome`, do tipo *Constant*: valor qualquer, porque o script o sobrescreve.
-2. Atalho **Disparar publicação**, do tipo *Regular HTTP Shortcut*:
-   - Method `POST`.
-   - URL `https://api.github.com/repos/danguibes/tesourodireto/actions/workflows/publicar.yml/dispatches`
-   - Headers: `Authorization: Bearer {token}` e
-     `Accept: application/vnd.github+json`. O `{token}` é a variável, inserida
-     pelo botão de variáveis do campo.
-   - Request Body: *Custom text*, tipo `application/json`, conteúdo
-     `{"ref":"main"}`.
+1. No app, abra o menu ⋮ → *Import / Export* → *Import from URL* e cole:
+   `https://raw.githubusercontent.com/danguibes/tesourodireto/main/celular/http-shortcuts.json`
+2. Abra *Global Variables* (no menu ⋮), toque em `token` e cole o token. O arquivo
+   vem com o token vazio e marcado para não sair numa exportação.
+3. Na categoria **Tesouro Direto**, segure **Baixar Tesouro** e ponha-o na
+   tela inicial.
 
-   Sozinho, ele republica o site com o último CSV enviado. A resposta certa
-   é **204**, sem corpo.
-3. Atalho **Publicar Tesouro**, do tipo *Regular HTTP Shortcut*:
-   - Method `POST`.
-   - URL `https://uploads.github.com/repos/danguibes/tesourodireto/releases/424704737/assets?name={nome}`
-     (`424704737` é o id do release `fonte`).
-   - Headers: `Authorization: Bearer {token}` e `Content-Type: text/csv`.
-   - Request Body: *File*, o arquivo recebido pelo Compartilhar.
-   - Em *Trigger & Execution Settings*, ligue a opção de aparecer no menu
-     Compartilhar para arquivos.
-   - Em *Scripting*:
-     - *Run before execution*:
-       ```js
-       setVariable("nome", "precotaxatesourodireto-" + Date.now() + ".csv");
-       ```
-     - *Run on success*:
-       ```js
-       enqueueShortcut("Disparar publicação");
-       ```
+O arquivo traz três atalhos:
 
-   A resposta certa do envio é **201**.
-4. Atalho **Baixar Tesouro**, do tipo *Browser Shortcut*, com o link que está
-   no topo de `scripts/publicar_dados.ps1`. Ponha-o na tela inicial.
+- **Baixar Tesouro** abre o link do CSV no navegador.
+- **Publicar Tesouro** envia o CSV com
+  `precotaxatesourodireto-<uuid>.csv` como nome. Ele aparece no Compartilhar
+  e, tocado dentro do app, abre o seletor de arquivos. O tempo limite é de
+  5 minutos, porque o padrão do app, de 10 segundos, não basta para 14 MB
+  pelo celular. Se der certo, chama o próximo.
+- **Disparar publicação** dispara o workflow. Sozinho, republica o site com o
+  último CSV enviado.
+
+O formato foi tirado do código do app, na versão 4.9.0 (formato 92, que
+importa a partir da 90). Se uma versão futura recusar o arquivo, os campos
+são os mesmos da montagem à mão: `POST` com corpo *File* para
+`uploads.github.com/.../releases/424704737/assets?name=...`, e `POST` com
+`{"ref":"main"}` para `.../actions/workflows/publicar.yml/dispatches`, os dois
+com `Authorization: Bearer <token>`.
 
 As duas chamadas foram conferidas em 28/10/2026, do notebook, com a mesma URL,
 os mesmos cabeçalhos e o mesmo corpo: o envio deu 201, o disparo deu 204, e o
-workflow publicou o anexo novo e apagou o antigo. Os nomes dos menus do HTTP
-Shortcuts são os da versão em inglês e podem variar um pouco entre versões.
+workflow publicou o anexo novo e apagou o antigo. A importação no app ainda
+não foi testada.
 
 ## Endereço
 

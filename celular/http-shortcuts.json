@@ -1,0 +1,83 @@
+{
+  "version": 92,
+  "compatibilityVersion": 90,
+  "categories": [
+    {
+      "id": "1dda013f-94eb-41fb-9620-0b909f9ef508",
+      "name": "Tesouro Direto",
+      "shortcuts": [
+        {
+          "id": "ffb800a4-7056-4c79-a8f0-739fffe61b26",
+          "name": "Baixar Tesouro",
+          "description": "Abre o CSV do Tesouro Transparente no navegador",
+          "executionType": "browser",
+          "url": "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv",
+          "launcherShortcut": true
+        },
+        {
+          "id": "ab399c9e-ea09-4a67-bf2a-a57b1bde5062",
+          "name": "Publicar Tesouro",
+          "description": "Compartilhe o CSV baixado com este atalho",
+          "executionType": "app",
+          "method": "POST",
+          "url": "https://uploads.github.com/repos/danguibes/tesourodireto/releases/424704737/assets?name=precotaxatesourodireto-{{868fd347-ee10-472f-b279-98b931482055}}.csv",
+          "headers": [
+            { "key": "Authorization", "value": "Bearer {{c085aa3e-eb43-477f-8e10-64380ca100b0}}" },
+            { "key": "Accept", "value": "application/vnd.github+json" },
+            { "key": "Content-Type", "value": "text/csv" }
+          ],
+          "requestBodyType": "file",
+          "contentType": "text/csv",
+          "fileUploadOptions": { "fileUploadType": "file_picker" },
+          "timeout": 300000,
+          "launcherShortcut": true,
+          "codeOnSuccess": "enqueueShortcut(\"3f153164-5f78-4024-b52d-9c77c1b3fba1\");",
+          "responseHandling": {
+            "uiType": "toast",
+            "successOutput": "message",
+            "successMessage": "CSV enviado. O site atualiza em uns 2 minutos.",
+            "failureOutput": "detailed"
+          }
+        },
+        {
+          "id": "3f153164-5f78-4024-b52d-9c77c1b3fba1",
+          "name": "Disparar publicação",
+          "description": "Republica o site com o último CSV enviado",
+          "executionType": "app",
+          "method": "POST",
+          "url": "https://api.github.com/repos/danguibes/tesourodireto/actions/workflows/publicar.yml/dispatches",
+          "headers": [
+            { "key": "Authorization", "value": "Bearer {{c085aa3e-eb43-477f-8e10-64380ca100b0}}" },
+            { "key": "Accept", "value": "application/vnd.github+json" }
+          ],
+          "requestBodyType": "custom_text",
+          "contentType": "application/json",
+          "bodyContent": "{\"ref\":\"main\"}",
+          "timeout": 30000,
+          "excludeFromFileSharing": true,
+          "launcherShortcut": false,
+          "responseHandling": {
+            "uiType": "toast",
+            "successOutput": "message",
+            "successMessage": "Publicação disparada.",
+            "failureOutput": "detailed"
+          }
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "id": "c085aa3e-eb43-477f-8e10-64380ca100b0",
+      "key": "token",
+      "type": "constant",
+      "value": "",
+      "isExcludeValueFromExport": true
+    },
+    {
+      "id": "868fd347-ee10-472f-b279-98b931482055",
+      "key": "envio",
+      "type": "uuid"
+    }
+  ]
+}
