@@ -687,7 +687,7 @@ async function processar(texto, palco) {
       <dl class="cifras" id="cifrasFluxo"></dl>
       <div class="legenda" id="legFluxo"></div>
       <div id="colunasFluxo"></div>
-      <details style="margin-top:1rem"><summary>Ano a ano</summary>
+      <details style="margin-top:1rem"><summary>Ano a ano, e mês a mês</summary>
         <div class="rolagem rolagemH" id="tabFluxo" style="margin-top:.6rem"></div>
       </details>
       <div class="prosa" style="margin-top:.9rem">
@@ -844,6 +844,7 @@ function aliquotaIR(dias) {
 function projetarFluxo(linhas, taxas) {
   const hoje = info.ultimaDataBase;
   const porAno = new Map();
+  const porMes = new Map();
   const zero = () => ({ principal: 0, cupons: 0, renda: 0, ir: 0, bruto: 0 });
   const tot = { ...zero(), liquido: 0, prox12: 0, ultimo: null };
 
@@ -886,10 +887,14 @@ function projetarFluxo(linhas, taxas) {
       p.ir = ir;
       p.bruto = p.principal + p.cupons + p.renda + ir;
 
-      const ano = new Date(dia * 86400000).getUTCFullYear();
+      const d = new Date(dia * 86400000);
+      const ano = d.getUTCFullYear();
+      const mes = ano * 12 + d.getUTCMonth();
       if (!porAno.has(ano)) porAno.set(ano, zero());
+      if (!porMes.has(mes)) porMes.set(mes, zero());
       const acc = porAno.get(ano);
-      for (const k of Object.keys(p)) { acc[k] += p[k]; tot[k] += p[k]; }
+      const accMes = porMes.get(mes);
+      for (const k of Object.keys(p)) { acc[k] += p[k]; accMes[k] += p[k]; tot[k] += p[k]; }
       tot.liquido += p.bruto - ir;
       if (dia - hoje <= 365) tot.prox12 += p.bruto - ir;
       if (tot.ultimo == null || dia > tot.ultimo) tot.ultimo = dia;
@@ -900,7 +905,12 @@ function projetarFluxo(linhas, taxas) {
   const anos = [...porAno.keys()].sort((a, b) => a - b);
   const linhasAno = [];
   for (let a = anos[0]; anos.length && a <= anos[anos.length - 1]; a++) {
-    linhasAno.push({ ano: a, ...(porAno.get(a) || zero()) });
+    linhasAno.push({ ano: a, ...(porAno.get(a) || zero()), meses: [] });
+  }
+  // Só a tabela abre o ano em meses, e só os meses com pagamento.
+  for (const m of [...porMes.keys()].sort((a, b) => a - b)) {
+    linhasAno.find((l) => l.ano === Math.floor(m / 12))
+      .meses.push({ mes: m % 12, ...porMes.get(m) });
   }
   return { anos: linhasAno, tot };
 }
@@ -939,14 +949,45 @@ function desenharFluxo(saida, f) {
     </div>`;
 
   const liquidas = usadas.filter((p) => p.chave !== "ir");
-  saida.querySelector("#tabFluxo").innerHTML = `<table class="tabela"><thead><tr>
+  const valores = (x) => `${liquidas.map((p) => `<td>${brl(x[p.chave])}</td>`).join("")}
+      <td>${brl(x.ir)}</td><td><b>${brl(x.bruto - x.ir)}</b></td><td>${brl(x.bruto)}</td>`;
+  const comPagamento = anos.filter((a) => a.bruto > 0);
+  const tab = saida.querySelector("#tabFluxo");
+  tab.innerHTML = `<div class="periodos">
+      <button type="button" class="botao fraco" data-todos="abrir">Abrir todos os meses</button>
+      <button type="button" class="botao fraco" data-todos="fechar">Fechar todos</button>
+    </div>
+    <table class="tabela fluxoMes"><thead><tr>
       <th>Ano</th>${liquidas.map((p) => `<th>${p.rotulo}, líquido</th>`).join("")}
       <th>IR</th><th>Líquido</th><th>Bruto</th>
-    </tr></thead><tbody>${anos.filter((a) => a.bruto > 0).map((a) => `<tr>
-      <td>${a.ano}</td>${liquidas.map((p) => `<td>${brl(a[p.chave])}</td>`).join("")}
-      <td>${brl(a.ir)}</td><td><b>${brl(a.bruto - a.ir)}</b></td><td>${brl(a.bruto)}</td>
-    </tr>`).join("")}</tbody></table>`;
+    </tr></thead><tbody>${comPagamento.map((a) => `<tr class="ano">
+      <td><button type="button" class="abreAno" data-ano="${a.ano}"
+        aria-expanded="${anosAbertos.has(a.ano)}">${a.ano}</button></td>${valores(a)}
+    </tr>${a.meses.map((m) => `<tr class="mes" data-ano="${a.ano}"${anosAbertos.has(a.ano) ? "" : " hidden"}>
+      <td>${MESES[m.mes]}/${String(a.ano).slice(2)}</td>${valores(m)}
+    </tr>`).join("")}`).join("")}</tbody></table>`;
+
+  const mostrar = (ano, aberto) => {
+    if (aberto) anosAbertos.add(ano); else anosAbertos.delete(ano);
+    tab.querySelector(`.abreAno[data-ano="${ano}"]`).setAttribute("aria-expanded", String(aberto));
+    for (const tr of tab.querySelectorAll(`tr.mes[data-ano="${ano}"]`)) tr.hidden = !aberto;
+  };
+  tab.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.todos) {
+      for (const a of comPagamento) mostrar(a.ano, b.dataset.todos === "abrir");
+    } else if (b.dataset.ano) {
+      const ano = Number(b.dataset.ano);
+      mostrar(ano, !anosAbertos.has(ano));
+    }
+  });
 }
+
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun",
+               "jul", "ago", "set", "out", "nov", "dez"];
+// Anos abertos em meses; sobrevive a redesenhar a tabela quando um índice muda.
+const anosAbertos = new Set();
 const anoDe = (dia) => new Date(dia * 86400000).getUTCFullYear();
 
 // ---------------------------------------------------------------- histórico

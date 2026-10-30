@@ -584,3 +584,17 @@ details[open] > summary::before { content: "−"; }
 
 .ajustes { margin: 0.6rem 0 0; padding-left: 1.1rem; font-size: 0.88rem; max-width: var(--prosa); }
 .ajustes li { margin-bottom: 0.3rem; }
+
+/* Tabela do fluxo: cada ano abre os seus meses. */
+.fluxoMes .abreAno {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-weight: 600; color: inherit; display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.fluxoMes .abreAno::before {
+  content: ""; width: 0.4rem; height: 0.4rem;
+  border-right: 1.5px solid var(--tinta-fraca); border-bottom: 1.5px solid var(--tinta-fraca);
+  transform: rotate(-45deg); transition: transform 0.15s;
+}
+.fluxoMes .abreAno[aria-expanded="true"]::before { transform: rotate(45deg); }
+.fluxoMes tr.mes td { color: var(--tinta-fraca); font-size: 0.85rem; }
+.fluxoMes tr.mes td:first-child { padding-left: 1.3rem; }
