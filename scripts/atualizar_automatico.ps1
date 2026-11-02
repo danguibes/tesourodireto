@@ -1,9 +1,10 @@
 # Baixa o CSV do Tesouro direto do portal e publica o site, sem perguntar nada.
 #
-# Roda pela tarefa agendada "Tesouro Direto - atualizacao automatica", as 08:30
+# Roda pela tarefa agendada "Tesouro Direto - atualizacao automatica", as 10:30
 # e as 13:30, que acorda o notebook da espera (so na tomada). O portal atualiza
-# o arquivo por volta das 07:20 de Brasilia; a segunda rodada cobre os dias em
-# que ele atrasa, e nao publica nada se o arquivo nao mudou.
+# o arquivo por volta das 07:20 de Brasilia (10:20 UTC, que e o horario do
+# Last-Modified); a segunda rodada cobre os dias em que ele atrasa, e nao
+# publica nada se o arquivo nao mudou.
 #
 # Em outubro de 2026 o portal respondia a qualquer script com um desafio em
 # JavaScript; em 02/11/2026 voltou a entregar o CSV para um download simples.
