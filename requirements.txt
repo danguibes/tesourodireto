@@ -1,5 +1,5 @@
 pandas>=2.0
 numpy>=1.24
 requests>=2.31
-bizdays>=1.0.16
+bizdays>=1.0.16,<2  # a 2.0.0 (nov/2026) mudou Calendar.load
 python-dateutil>=2.8

@@ -44,7 +44,7 @@ jobs:
           python-version: "3.12"
 
       - name: Instalar dependências
-        run: pip install --quiet pandas requests bizdays python-dateutil numpy
+        run: pip install --quiet pandas requests "bizdays>=1.0.16,<2" python-dateutil numpy
 
       - name: Baixar o CSV mais novo do release fonte
         id: fonte
