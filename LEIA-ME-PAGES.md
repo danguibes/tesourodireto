@@ -189,6 +189,16 @@ os mesmos cabeçalhos e o mesmo corpo: o envio deu 201, o disparo deu 204, e o
 workflow publicou o anexo novo e apagou o antigo. A importação no app ainda
 não foi testada.
 
+## Aviso de dados atrasados
+
+Quando os preços têm mais de 2 dias úteis (o normal é 1), a barra lateral mostra
+um aviso com a causa (`site/js/frescor.js`). O portal não aceita consulta de
+outros sites, então quem confere é o `atualizar_automatico.ps1`: a cada rodada
+ele anota no texto do release `fonte` a linha
+`verificacao portal=<data do arquivo> em=<hora da conferência>`, e a página a lê
+pela API pública do GitHub. Não apague essa linha do release. Se a anotação
+tiver mais de 36 horas, o aviso diz que não sabe de quem é o atraso.
+
 ## Endereço
 
 O site fica em <https://danguibes.github.io/tesourodireto/>, sem domínio

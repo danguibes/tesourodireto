@@ -3,8 +3,10 @@
 import * as simulacao from "./simulacao.js";
 import * as carteira from "./carteira.js";
 import { montarAparencia } from "./aparencia.js";
+import { montarFrescor } from "./frescor.js";
 
 montarAparencia(document.getElementById("aparencia"));
+montarFrescor(document.getElementById("frescor")).catch(console.error);
 
 const telas = { simulacao, carteira };
 

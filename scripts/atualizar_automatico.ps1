@@ -78,6 +78,24 @@ if ($primeira -ne $Cabecalho -or $info.Length -lt 5MB) {
     exit 0
 }
 
+# Anota no release `fonte` a data do arquivo no portal e a hora desta
+# conferencia. O site le esta linha para dizer, quando os dados atrasam, se o
+# atraso e do Tesouro (site/js/frescor.js). Falhar aqui nao impede publicar.
+$notas = Join-Path $Pasta "notas_release.txt"
+$ErrorActionPreference = "Continue"
+try {
+    $formato = "yyyy-MM-ddTHH:mm:ssZ"
+    Set-Content -Path $notas -Encoding ASCII -Value @(
+        "CSV do Tesouro Transparente. Substituido a cada publicacao; nao e uma versao do software.",
+        "",
+        ("verificacao portal={0} em={1}" -f $info.LastWriteTimeUtc.ToString($formato), (Get-Date).ToUniversalTime().ToString($formato)))
+    gh release edit fonte --repo danguibes/tesourodireto --notes-file $notas *> $null
+    if ($LASTEXITCODE -ne 0) { Registrar "Nao anotou a conferencia no release (gh saiu com $LASTEXITCODE)." }
+} catch {
+    Registrar "Nao anotou a conferencia no release: $($_.Exception.Message)"
+}
+$ErrorActionPreference = "Stop"
+
 $hash = (Get-FileHash -Path $Csv -Algorithm SHA256).Hash
 if ((Test-Path $ArqHash) -and ((Get-Content $ArqHash -Raw).Trim() -eq $hash)) {
     Registrar "Arquivo igual ao ultimo publicado; nada a fazer."
